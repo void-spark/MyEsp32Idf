@@ -41,7 +41,6 @@ void LedBlink2::setPattern(long* pattern, int times) {
 }
 
 void LedBlink2::_trigger() {
-    printf("state: %d times: %d timer %p\n", _state, _times, _timer);
     if(_state == 0) {
         if(!_infinite) {
             if(_times == 0) {
