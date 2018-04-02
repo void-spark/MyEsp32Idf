@@ -12,6 +12,7 @@
 #include "esp_system.h"
 #include "esp_spi_flash.h"
 #include "driver/gpio.h"
+#include "esp32_digital_led_lib.h"
 
 #include "RcReceiver.h"
 
@@ -19,7 +20,7 @@
 #define LED2_EXT 32
 #define LED3_EXT 25
 
-#define WS2812_1 26
+#define WS2812_1 GPIO_NUM_26
 #define NUM_PIXELS 8
 
 #define RCV1_EXT GPIO_NUM_15
@@ -28,6 +29,11 @@
 #define TRIS (RC_BITS - 1) / 2
 
 RcReceiver rcReceiver(RC_BITS, 12);
+
+strand_t strands[] = { {.rmtChannel = 0, .gpioNum = WS2812_1, .ledType = LED_WS2812B_V3, .brightLimit = 32, .numPixels =  NUM_PIXELS,
+   .pixels = nullptr, ._stateVars = nullptr} };
+
+strand_t * strand = &strands[0];
 
 void printAc();
 
@@ -39,6 +45,14 @@ IRAM_ATTR void myHandleInterrupt(void *) {
 }
 
 extern "C" void app_main() {
+
+
+    gpio_pad_select_gpio(WS2812_1);
+    gpio_set_direction(WS2812_1, GPIO_MODE_OUTPUT);
+    gpio_set_level(WS2812_1, 0);
+
+
+
     printf("Hello world!\n");
 
     /* Print chip information */
@@ -54,6 +68,22 @@ extern "C" void app_main() {
     printf("%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
         (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
+
+
+    if (digitalLeds_initStrands(strands, 1)) {
+        printf("Failed to initialize ws2812");
+        while (true) {};
+    }
+    digitalLeds_resetPixels(strand);
+
+
+    for (int i = 0; i < strand->numPixels; i++) {
+        strand->pixels[i] = pixelFromRGB(5, 0, 0);
+    }
+    digitalLeds_updatePixels(strand);
+
+
+
     gpio_config_t io_conf;
     io_conf.pin_bit_mask = 1ULL << RCV1_EXT;
     io_conf.mode = GPIO_MODE_INPUT;
@@ -68,13 +98,7 @@ extern "C" void app_main() {
     while(true) {
         printAc();
     }
-
-
 }
-
-
-
-
 
 
 //TODO: 'Move' this to ac_recv, tweak timings for more reliability??, print timings..,
@@ -155,5 +179,12 @@ void printAc() {
         address += result[3] == TRI_1 ? 0 : 4;
 
         printf("Switch %d: %s\n", address + 1, stateOn ? "ON" : "OFF");
+
+        if(stateOn) {
+            strand->pixels[address] = pixelFromRGB(0, 0, 40);
+        } else {
+            strand->pixels[address] = pixelFromRGB(0, 0, 0);
+        }
+        digitalLeds_updatePixels(strand);
     }
 }
