@@ -1,11 +1,3 @@
-/* Hello World Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -14,11 +6,13 @@
 #include "driver/gpio.h"
 #include "esp32_digital_led_lib.h"
 
+#include "LedBlink2.h"
 #include "RcReceiver.h"
 
-#define LED1_EXT 27
-#define LED2_EXT 32
-#define LED3_EXT 25
+#define LED_BUILTIN GPIO_NUM_2
+#define LED1_EXT GPIO_NUM_27
+#define LED2_EXT GPIO_NUM_32
+#define LED3_EXT GPIO_NUM_25
 
 #define WS2812_1 GPIO_NUM_26
 #define NUM_PIXELS 8
@@ -27,6 +21,15 @@
 
 #define RC_BITS 25
 #define TRIS (RC_BITS - 1) / 2
+
+long ledPatternWait[] = {250,250};
+long ledPatternPending[] = {100,100};
+long ledPatternConnected[] = {100,900};
+
+long ledPatternRc[] = {150,150};
+
+LedBlink2 blinkerInt(LED_BUILTIN);
+LedBlink2 blinkerExt1(LED1_EXT);
 
 RcReceiver rcReceiver(RC_BITS, 12);
 
@@ -177,6 +180,9 @@ void printAc() {
         address += result[1] == TRI_1 ? 0 : 1;
         address += result[2] == TRI_1 ? 0 : 2;
         address += result[3] == TRI_1 ? 0 : 4;
+
+        blinkerExt1.setPattern(ledPatternRc, address + 1);
+
 
         printf("Switch %d: %s\n", address + 1, stateOn ? "ON" : "OFF");
 

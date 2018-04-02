@@ -30,6 +30,7 @@ RcReceiver::~RcReceiver() {
   delete [] bits;
   delete [] matching;
   delete [] trisHolder;
+  delete [] bitDataHolder;
 }
 
 void RcReceiver::printInfo() {

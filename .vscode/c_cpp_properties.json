@@ -6,6 +6,7 @@
                 "${workspaceFolder}",
                 "${workspaceFolder}/build/include",
                 "${workspaceFolder}/components/esp32_digital_led_lib/include",
+                "${workspaceFolder}/components/LedBlink2/include",
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components",
                 "C:/Portable/msys32-esp32-20180110/opt/xtensa-esp32-elf/lib/gcc/xtensa-esp32-elf/5.2.0/include",
                 "C:/Portable/msys32-esp32-20180110/opt/xtensa-esp32-elf/xtensa-esp32-elf/include/c++/5.2.0",
@@ -23,6 +24,7 @@
                     "${workspaceFolder}",
                     "${workspaceFolder}/build/include",
                     "${workspaceFolder}/components/esp32_digital_led_lib/include",
+                    "${workspaceFolder}/components/LedBlink2/include",
                     "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components",
                     "C:/Portable/msys32-esp32-20180110/opt/xtensa-esp32-elf/lib/gcc/xtensa-esp32-elf/5.2.0/include",
                     "C:/Portable/msys32-esp32-20180110/opt/xtensa-esp32-elf/xtensa-esp32-elf/include/c++/5.2.0",
@@ -38,7 +40,11 @@
                 "limitSymbolsToIncludedHeaders": true,
                 "databaseFilename": ""
             },
-            "defines": ["ESP_PLATFORM"],
+            "defines": [
+                "ESP_PLATFORM", 
+                "configUSE_TIMERS=1",
+                "configSUPPORT_DYNAMIC_ALLOCATION=1"
+                ],
             "intelliSenseMode": "clang-x64",
             "cStandard": "c11",
             "cppStandard": "c++17"
