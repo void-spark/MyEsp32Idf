@@ -1,10 +1,22 @@
 #include <stdio.h>
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
 #include "esp_system.h"
+#include "esp_wifi.h"
+#include "esp_event_loop.h"
+#include "esp_log.h"
 #include "esp_spi_flash.h"
+#include "nvs_flash.h"
 #include "driver/gpio.h"
 #include "esp32_digital_led_lib.h"
+
+
+
+#include "lwip/err.h"
+#include "lwip/sys.h"
+
 
 #include "LedBlink2.h"
 #include "RcReceiver.h"
@@ -21,6 +33,21 @@
 
 #define RC_BITS 25
 #define TRIS (RC_BITS - 1) / 2
+
+// WiFi credentials.
+#define WIFI_SSID "Milkrun"
+#define WIFI_PASS "55382636751623425906"
+
+/* FreeRTOS event group to signal when we are connected*/
+static EventGroupHandle_t wifi_event_group;
+
+/* The event group allows multiple bits for each event,
+   but we only care about one event - are we connected
+   to the AP with an IP? */
+const int WIFI_CONNECTED_BIT = BIT0;
+
+static const char *TAG = "MyEsp32";
+
 
 long ledPatternWait[] = {250,250};
 long ledPatternPending[] = {100,100};
@@ -47,16 +74,58 @@ IRAM_ATTR void myHandleInterrupt(void *) {
   //digitalWrite(TMP_OUT, state);
 }
 
-extern "C" void app_main() {
 
+static esp_err_t event_handler(void *ctx, system_event_t *event)
+{
+    switch(event->event_id) {
+    case SYSTEM_EVENT_STA_START:
+        esp_wifi_connect();
+        break;
+    case SYSTEM_EVENT_STA_GOT_IP:
+        ESP_LOGI(TAG, "got ip:%s",
+                 ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
+        xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
+        break;
+    case SYSTEM_EVENT_STA_DISCONNECTED:
+        esp_wifi_connect();
+        xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
+        break;
+    default:
+        break;
+    }
+    return ESP_OK;
+}
+
+
+void wifi_init_sta()
+{
+    wifi_event_group = xEventGroupCreate();
+
+    tcpip_adapter_init();
+    ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL) );
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+
+    wifi_config_t wifi_config = {};
+    strcpy((char*)wifi_config.sta.ssid, WIFI_SSID);
+    strcpy((char*)wifi_config.sta.password, WIFI_PASS);
+
+    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
+    ESP_ERROR_CHECK(esp_wifi_start() );
+
+    ESP_LOGI(TAG, "wifi_init_sta finished.");
+    ESP_LOGI(TAG, "connect to ap SSID:%s password:%s", WIFI_SSID, WIFI_PASS);
+}
+
+extern "C" void app_main() {
 
     gpio_pad_select_gpio(WS2812_1);
     gpio_set_direction(WS2812_1, GPIO_MODE_OUTPUT);
     gpio_set_level(WS2812_1, 0);
 
-
-
-    printf("Hello world!\n");
 
     /* Print chip information */
     esp_chip_info_t chip_info;
@@ -72,7 +141,6 @@ extern "C" void app_main() {
         (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
 
-
     if (digitalLeds_initStrands(strands, 1)) {
         printf("Failed to initialize ws2812");
         while (true) {};
@@ -85,6 +153,24 @@ extern "C" void app_main() {
     }
     digitalLeds_updatePixels(strand);
 
+    //Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+
+    // Initialize WiFi
+    wifi_init_sta();
+
+    blinkerInt.setPattern(ledPatternPending);
+    
+    ESP_LOGI(TAG, "Waiting for wifi");
+    xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
+
+    blinkerInt.setPattern(ledPatternConnected);
 
 
     gpio_config_t io_conf;
