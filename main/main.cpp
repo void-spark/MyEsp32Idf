@@ -18,6 +18,7 @@ extern "C" {
 }
 #include "LedBlink2.h"
 #include "RcReceiver.h"
+#include "player.h"
 
 #define LED_BUILTIN GPIO_NUM_2
 #define LED1_EXT GPIO_NUM_27
@@ -40,19 +41,17 @@ extern "C" {
 const char* mqtt_server = "mqtt://raspberrypi.fritz.box";
 
 
-/* FreeRTOS event group to signal when we are connected*/
-static EventGroupHandle_t wifi_event_group;
+/* FreeRTOS event group to signal app status changes*/
+static EventGroupHandle_t app_event_group;
 
-/* The event group allows multiple bits for each event,
-   but we only care about one event - are we connected
-   to the AP with an IP? */
 const int WIFI_CONNECTED_BIT = BIT0;
+const int MQTT_CONNECTED_BIT = BIT1;
 
 static const char *TAG = "MyEsp32";
 
 
-long ledPatternWait[] = {250,250};
-long ledPatternPending[] = {100,100};
+long ledPatternPendingWiFi[] = {100,100};
+long ledPatternPendingMqtt[] = {100,300};
 long ledPatternConnected[] = {100,900};
 
 long ledPatternRc[] = {150,150};
@@ -61,6 +60,8 @@ LedBlink2 blinkerInt(LED_BUILTIN);
 LedBlink2 blinkerExt1(LED1_EXT);
 
 RcReceiver rcReceiver(RC_BITS, 12);
+
+esp_mqtt_client_handle_t mqttClient;
 
 strand_t strands[] = { {.rmtChannel = 0, .gpioNum = WS2812_1, .ledType = LED_WS2812B_V3, .brightLimit = 32, .numPixels =  NUM_PIXELS,
    .pixels = nullptr, ._stateVars = nullptr} };
@@ -86,11 +87,11 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
     case SYSTEM_EVENT_STA_GOT_IP:
         ESP_LOGI(TAG, "got ip:%s",
                  ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
-        xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
+        xEventGroupSetBits(app_event_group, WIFI_CONNECTED_BIT);
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
         esp_wifi_connect();
-        xEventGroupClearBits(wifi_event_group, WIFI_CONNECTED_BIT);
+        xEventGroupClearBits(app_event_group, WIFI_CONNECTED_BIT);
         break;
     default:
         break;
@@ -101,27 +102,17 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
     esp_mqtt_client_handle_t client = event->client;
-    int msg_id;
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-            msg_id = esp_mqtt_client_subscribe(client, "/topic/qos0", 0);
-            ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-
-            msg_id = esp_mqtt_client_subscribe(client, "/topic/qos1", 1);
-            ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
-
-            msg_id = esp_mqtt_client_unsubscribe(client, "/topic/qos1");
-            ESP_LOGI(TAG, "sent unsubscribe successful, msg_id=%d", msg_id);
+            xEventGroupSetBits(app_event_group, MQTT_CONNECTED_BIT);
             break;
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+            xEventGroupClearBits(app_event_group, MQTT_CONNECTED_BIT);
             break;
-
         case MQTT_EVENT_SUBSCRIBED:
             ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
-            msg_id = esp_mqtt_client_publish(client, "/topic/qos0", "data", 0, 0, 0);
-            ESP_LOGI(TAG, "sent publish successful, msg_id=%d", msg_id);
             break;
         case MQTT_EVENT_UNSUBSCRIBED:
             ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
@@ -131,8 +122,8 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
             break;
         case MQTT_EVENT_DATA:
             ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-            printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-            printf("DATA=%.*s\r\n", event->data_len, event->data);
+            printf("TOPIC=%.*s\n", event->topic_len, event->topic);
+            printf("DATA=%.*s\n", event->data_len, event->data);
             break;
         case MQTT_EVENT_ERROR:
             ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
@@ -142,7 +133,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 }
 
 void wifi_init_sta() {
-    wifi_event_group = xEventGroupCreate();
+    app_event_group = xEventGroupCreate();
 
     tcpip_adapter_init();
     ESP_ERROR_CHECK(esp_event_loop_init(event_handler, NULL) );
@@ -169,8 +160,8 @@ static void mqtt_app_start(void) {
     strcpy(mqtt_cfg.uri, mqtt_server);
     mqtt_cfg.event_handle = mqtt_event_handler;
 
-    esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
-    esp_mqtt_client_start(client);
+    mqttClient = esp_mqtt_client_init(&mqtt_cfg);
+    esp_mqtt_client_start(mqttClient);
 }
 
 
@@ -180,6 +171,7 @@ extern "C" void app_main() {
     gpio_set_direction(WS2812_1, GPIO_MODE_OUTPUT);
     gpio_set_level(WS2812_1, 0);
 
+    playerSetup();
 
     /* Print chip information */
     esp_chip_info_t chip_info;
@@ -196,7 +188,7 @@ extern "C" void app_main() {
 
 
     if (digitalLeds_initStrands(strands, 1)) {
-        printf("Failed to initialize ws2812");
+        printf("Failed to initialize ws2812\n");
         while (true) {};
     }
     digitalLeds_resetPixels(strand);
@@ -219,15 +211,19 @@ extern "C" void app_main() {
     // Initialize WiFi
     wifi_init_sta();
 
-    blinkerInt.setPattern(ledPatternPending);
+    blinkerInt.setPattern(ledPatternPendingWiFi);
     
     ESP_LOGI(TAG, "Waiting for wifi");
-    xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
+    xEventGroupWaitBits(app_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
 
-    blinkerInt.setPattern(ledPatternConnected);
+    blinkerInt.setPattern(ledPatternPendingMqtt);
 
     mqtt_app_start();
 
+    ESP_LOGI(TAG, "Waiting for MQTT");
+    xEventGroupWaitBits(app_event_group, MQTT_CONNECTED_BIT, false, true, portMAX_DELAY);
+
+    blinkerInt.setPattern(ledPatternConnected);
 
     gpio_config_t io_conf;
     io_conf.pin_bit_mask = 1ULL << RCV1_EXT;
@@ -239,6 +235,8 @@ extern "C" void app_main() {
 
     gpio_install_isr_service(0);
     gpio_isr_handler_add(RCV1_EXT, myHandleInterrupt, NULL);
+
+    playerStart();
 
     while(true) {
         printAc();
@@ -309,6 +307,13 @@ void printAc() {
         address += result[1] == TRI_1 ? 0 : 1;
         address += result[2] == TRI_1 ? 0 : 2;
         address += result[3] == TRI_1 ? 0 : 4;
+
+        static char topic2[50];
+        static char msg2[50];
+        
+        snprintf (topic2, 50, "devices/receiver/sw%d/pulse_%s", address + 1, stateOn ? "on" : "off" );
+        snprintf (msg2, 50, "%s", "true" );
+        int msg_id = esp_mqtt_client_publish(mqttClient, topic2, msg2, 0, 0, 0);
     }
 
     if (sameAsLast && !sameAsTriggered) {
@@ -334,5 +339,12 @@ void printAc() {
             strand->pixels[address] = pixelFromRGB(0, 0, 0);
         }
         digitalLeds_updatePixels(strand);
+
+
+        static char topic[50];
+        static char msg[50];
+        snprintf (topic, 50, "devices/receiver/sw%d/on", address + 1);
+        snprintf (msg, 50, "%s", stateOn ? "true" : "false"  );
+        int msg_id = esp_mqtt_client_publish(mqttClient, topic, msg, 0, 0, 0);
     }
 }
