@@ -1,8 +1,10 @@
 #ifndef SOUND_H_
 #define SOUND_H_
 
-void i2s_setup(int bck, int lck, int din);
-void setup_triangle_sine_waves();
-void step_triangle_sine_waves();
+#include "freertos/FreeRTOS.h"
+#include "driver/i2s.h"
+
+void setup_triangle_sine_waves(i2s_port_t port, i2s_bits_per_sample_t bits, int sampleRate);
+void tsk_triangle_sine_waves(void *pvParameters);
 
 #endif

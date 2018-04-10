@@ -5,6 +5,7 @@
 
 #include "driver/i2s.h"
 
+#include "i2sstuff.h"
 #include "sound.h"
 #include "mp3player.h"
 
@@ -21,12 +22,22 @@
 #define DIN 22
 #define LCK 21
 
+#define I2S_NUM         (I2S_NUM_0)
+
 #define LED3_EXT GPIO_NUM_25
 
 static RingbufHandle_t ringBuf = NULL;
 
 void playerSetup() {
-    i2s_setup(BCK, LCK, DIN);
+    //for 36Khz sample rates, we create 100Hz sine wave, every cycle need 36000/100 = 360 samples (4-bytes or 8-bytes each sample)
+    //depend on bits_per_sample
+    //using 6 buffers, we need 60-samples per buffer
+    //if 2-channels, 16-bit each channel, total buffer is 360*4 = 1440 bytes
+
+    // i2s_setup(I2S_NUM, BCK, LCK, DIN, 8, 64); // old pcm/mp3?
+    // i2s_setup(I2S_NUM, BCK, LCK, DIN, 6, 60, I2S_BITS_PER_SAMPLE_16BIT, 44100); //sine
+
+    i2s_setup(I2S_NUM, BCK, LCK, DIN, 8, 256, I2S_BITS_PER_SAMPLE_16BIT, 44100);
 
     gpio_pad_select_gpio(LED3_EXT);
     gpio_set_direction(LED3_EXT, GPIO_MODE_OUTPUT);
@@ -38,10 +49,18 @@ void playerSetup() {
 
 static void tsknet(void *pvParameters);
 
-static void tsknote(void *pvParameters);
 static void tskpcm(void *pvParameters);
 
 void playerStart() {
+    // setup_triangle_sine_waves(I2S_NUM, I2S_BITS_PER_SAMPLE_16BIT, 44100);
+
+    // if (xTaskCreatePinnedToCore(tsk_triangle_sine_waves, "tsk_triangle_sine_waves", 2000, NULL, PRIO_NET, NULL, 1)!=pdPASS) {
+    //     printf("ERROR creating note task! Out of memory?\n");
+    // };
+    
+
+
+
     printf("Create ringbuf\n");
     ringBuf = xRingbufferCreate(12*1024, RINGBUF_TYPE_BYTEBUF); // was 16*
 
@@ -200,10 +219,8 @@ static void tskpcm(void *pvParameters) {
             sampleBuf[pos] |= writeBuf[3 + 4*pos];
         }
 
-        size_t bufPos = 0;
-        while(usableBytes - bufPos > 0) {
-            bufPos += i2s_write_bytes(I2S_NUM_0, ((const char *)sampleBuf) + bufPos, usableBytes - bufPos, portMAX_DELAY);
-        }
+        // Using portMAX_DELAY means this blocks till all bytes are written
+        i2s_write_bytes(I2S_NUM_0, (const char *)sampleBuf, usableBytes, portMAX_DELAY);
 
         for(int pos = usableBytes; pos < buffered ; pos++) {
             writeBuf[pos - usableBytes]  = writeBuf[pos];
@@ -212,9 +229,3 @@ static void tskpcm(void *pvParameters) {
     }
 }
 
-// handler for note data
-static void tsknote(void *pvParameters) {
-    while(true) {
-        step_triangle_sine_waves();
-   }
-}
