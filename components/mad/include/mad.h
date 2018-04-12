@@ -904,12 +904,6 @@ enum mad_flow {
   MAD_FLOW_IGNORE   = 0x0020	/* ignore the current frame */
 };
 
-struct t_sync {
-  struct mad_stream stream;
-  struct mad_frame frame;
-  struct mad_synth synth;
-};
-
 struct mad_decoder {
   enum mad_decoder_mode mode;
 
@@ -921,7 +915,11 @@ struct mad_decoder {
     int out;
   } async;
 
-  struct t_sync *sync;
+  struct {
+    struct mad_stream stream;
+    struct mad_frame frame;
+    struct mad_synth synth;
+  } *sync;
 
   void *cb_data;
 
