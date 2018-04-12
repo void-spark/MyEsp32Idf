@@ -40,16 +40,6 @@ char const mad_build[] = ""
 
 # if defined(FPM_64BIT)
   "FPM_64BIT "
-# elif defined(FPM_INTEL)
-  "FPM_INTEL "
-# elif defined(FPM_ARM)
-  "FPM_ARM "
-# elif defined(FPM_MIPS)
-  "FPM_MIPS "
-# elif defined(FPM_SPARC)
-  "FPM_SPARC "
-# elif defined(FPM_PPC)
-  "FPM_PPC "
 # elif defined(FPM_DEFAULT)
   "FPM_DEFAULT "
 # endif
