@@ -171,8 +171,7 @@ static void tsknet(void *pvParameters) {
                     close(client_sock);
 
                     printf("Disconnected\n");
-                    i2s_zero_dma_buffer(I2S_NUM_0);
-        // TODO: Clear/delete ring buffer?
+        // TODO: Clear/delete ring buffer? Mayby in the mp3 player? method for that.. :)
         //                receiveBuffer.skipData(receiveBuffer.bufferedBytes());
 
                     mp3player_destroy(mp3Player);
