@@ -22,7 +22,6 @@
 # ifndef LIBMAD_GLOBAL_H
 # define LIBMAD_GLOBAL_H
 
-#include "config.h"
 /* conditional debugging */
 
 # if defined(DEBUG) && defined(NDEBUG)

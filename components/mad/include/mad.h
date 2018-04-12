@@ -24,10 +24,6 @@
 extern "C" {
 # endif
 
-# define SIZEOF_INT 4
-# define SIZEOF_LONG 4
-# define SIZEOF_LONG_LONG 8
-
 # include "config.h"
 
 # include "version.h"
