@@ -19,7 +19,6 @@
  * $Id: layer3.c,v 1.43 2004/01/23 09:41:32 rob Exp $
  */
 
-
 # ifdef HAVE_CONFIG_H
 #  include "config.h"
 # endif
@@ -146,7 +145,7 @@ unsigned char const sfb_48000_long[] = {
 };
 
 static
-unsigned  char const sfb_44100_long[] = {
+unsigned char const sfb_44100_long[] = {
    4,  4,  4,  4,  4,  4,  6,  6,  8,   8,  10,
   12, 16, 20, 24, 28, 34, 42, 50, 54,  76, 158
 };
@@ -187,7 +186,7 @@ unsigned char const sfb_48000_mixed[] = {
 };
 
 static
-unsigned  char const sfb_44100_mixed[] = {
+unsigned char const sfb_44100_mixed[] = {
   /* long */   4,  4,  4,  4,  4,  4,  6,  6,
   /* short */  4,  4,  4,  6,  6,  6,  8,  8,  8, 10,
               10, 10, 12, 12, 12, 14, 14, 14, 18, 18,
@@ -432,7 +431,7 @@ mad_fixed_t const window_l[36] = {
  * window_s[i] = sin((PI / 12) * (i + 1/2))
  */
 static
-mad_fixed_t const  window_s[12] = {
+mad_fixed_t const window_s[12] = {
   MAD_F(0x0216a2a2) /* 0.130526192 */, MAD_F(0x061f78aa) /* 0.382683432 */,
   MAD_F(0x09bd7ca0) /* 0.608761429 */, MAD_F(0x0cb19346) /* 0.793353340 */,
   MAD_F(0x0ec835e8) /* 0.923879533 */, MAD_F(0x0fdcf549) /* 0.991444861 */,
@@ -449,7 +448,7 @@ mad_fixed_t const  window_s[12] = {
  * is_table[i] = is_ratio[i] / (1 + is_ratio[i])
  */
 static
-mad_fixed_t const  is_table[7] = {
+mad_fixed_t const is_table[7] = {
   MAD_F(0x00000000) /* 0.000000000 */,
   MAD_F(0x0361962f) /* 0.211324865 */,
   MAD_F(0x05db3d74) /* 0.366025404 */,
@@ -2387,10 +2386,10 @@ enum mad_error III_decode(struct mad_bitptr *ptr, struct mad_frame *frame,
       struct channel *channel = &granule->ch[ch];
       unsigned int part2_length;
 
-      sfbwidth[ch] =  sfbwidth_table[sfreqi].l;
+      sfbwidth[ch] = sfbwidth_table[sfreqi].l;
       if (channel->block_type == 2) {
 	sfbwidth[ch] = (channel->flags & mixed_block_flag) ?
-	   sfbwidth_table[sfreqi].m :  sfbwidth_table[sfreqi].s;
+	  sfbwidth_table[sfreqi].m : sfbwidth_table[sfreqi].s;
       }
 
       if (header->flags & MAD_FLAG_LSF_EXT) {
@@ -2530,8 +2529,6 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
 
   /* allocate Layer III dynamic structures */
     frame->overlap=(void*)ovlbuf;
-	stream->main_data=&MainData;
-/*
   if (stream->main_data == 0) {
     stream->main_data = malloc(MAD_BUFFER_MDLEN);
     if (stream->main_data == 0) {
@@ -2547,7 +2544,6 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
       return -1;
     }
   }
-*/
 
   nch = MAD_NCHANNELS(header);
   si_len = (header->flags & MAD_FLAG_LSF_EXT) ?
@@ -2574,6 +2570,7 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
       result = -1;
     }
   }
+
   /* decode frame side information */
 
   error = III_sideinfo(&stream->ptr, nch, header->flags & MAD_FLAG_LSF_EXT,
@@ -2585,7 +2582,6 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
 
   header->flags        |= priv_bitlen;
   header->private_bits |= si.private_bits;
-
 
   /* find main_data of next frame */
 
