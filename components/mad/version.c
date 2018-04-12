@@ -38,10 +38,6 @@ char const mad_build[] = ""
   "NDEBUG "
 # endif
 
-# if defined(EXPERIMENTAL)
-  "EXPERIMENTAL "
-# endif
-
 # if defined(FPM_64BIT)
   "FPM_64BIT "
 # elif defined(FPM_INTEL)
