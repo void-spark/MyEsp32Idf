@@ -46,7 +46,6 @@
 # include "layer3.h"
 #include "align.h"
 
-
 /* --- Layer III ----------------------------------------------------------- */
 
 enum {
@@ -2525,10 +2524,9 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
   struct sideinfo si;
   enum mad_error error;
   int result = 0;
-  static mad_fixed_t ovlbuf[2 * 32 * 18];
 
   /* allocate Layer III dynamic structures */
-    frame->overlap=(void*)ovlbuf;
+
   if (stream->main_data == 0) {
     stream->main_data = malloc(MAD_BUFFER_MDLEN);
     if (stream->main_data == 0) {
