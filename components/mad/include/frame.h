@@ -67,8 +67,6 @@ struct mad_header {
 struct mad_frame {
   struct mad_header header;		/* MPEG audio header */
 
-  int options;				/* decoding options (from stream) */
-
   mad_fixed_t sbsample[2][36][32];	/* synthesis subband filter samples */
   mad_fixed_t (*overlap)[2][32][18];	/* Layer III block overlap data */
 };

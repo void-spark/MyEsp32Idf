@@ -41,8 +41,6 @@ enum mad_flow {
 struct mad_decoder {
   enum mad_decoder_mode mode;
 
-  int options;
-
   struct {
     long pid;
     int in;
@@ -81,9 +79,6 @@ void mad_decoder_init(struct mad_decoder *, void *,
 					struct mad_frame *),
 		      enum mad_flow (*)(void *, void *, unsigned int *));
 int mad_decoder_finish(struct mad_decoder *);
-
-# define mad_decoder_options(decoder, opts)  \
-    ((void) ((decoder)->options = (opts)))
 
 int mad_decoder_run(struct mad_decoder *, enum mad_decoder_mode);
 int mad_decoder_message(struct mad_decoder *, void *, unsigned int *);

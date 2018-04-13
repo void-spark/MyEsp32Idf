@@ -122,8 +122,7 @@ int mad_layer_I(struct mad_stream *stream, struct mad_frame *frame)
       mad_bit_crc(stream->ptr, 4 * (bound * nch + (32 - bound)),
 		  header->crc_check);
 
-    if (header->crc_check != header->crc_target &&
-	!(frame->options & MAD_OPTION_IGNORECRC)) {
+    if (header->crc_check != header->crc_target) {
       stream->error = MAD_ERROR_BADCRC;
       return -1;
     }
@@ -429,8 +428,7 @@ int mad_layer_II(struct mad_stream *stream, struct mad_frame *frame)
       mad_bit_crc(start, mad_bit_length(&start, &stream->ptr),
 		  header->crc_check);
 
-    if (header->crc_check != header->crc_target &&
-	!(frame->options & MAD_OPTION_IGNORECRC)) {
+    if (header->crc_check != header->crc_target) {
       stream->error = MAD_ERROR_BADCRC;
       return -1;
     }

@@ -77,25 +77,11 @@ struct mad_stream {
 					/* Layer III main_data() */
   unsigned int md_len;			/* bytes in main_data */
 
-  int options;				/* decoding options (see below) */
   enum mad_error error;			/* error code (see above) */
-};
-
-enum {
-  MAD_OPTION_IGNORECRC      = 0x0001,	/* ignore CRC errors */
-  MAD_OPTION_HALFSAMPLERATE = 0x0002	/* generate PCM at 1/2 sample rate */
-# if 0  /* not yet implemented */
-  MAD_OPTION_LEFTCHANNEL    = 0x0010,	/* decode left channel only */
-  MAD_OPTION_RIGHTCHANNEL   = 0x0020,	/* decode right channel only */
-  MAD_OPTION_SINGLECHANNEL  = 0x0030	/* combine channels */
-# endif
 };
 
 void mad_stream_init(struct mad_stream *);
 void mad_stream_finish(struct mad_stream *);
-
-# define mad_stream_options(stream, opts)  \
-    ((void) ((stream)->options = (opts)))
 
 void mad_stream_buffer(struct mad_stream *,
 		       unsigned char const *, unsigned long);

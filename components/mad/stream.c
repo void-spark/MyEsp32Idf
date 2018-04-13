@@ -53,7 +53,6 @@ void mad_stream_init(struct mad_stream *stream)
   stream->main_data  = 0;
   stream->md_len     = 0;
 
-  stream->options    = 0;
   stream->error      = MAD_ERROR_NONE;
 }
 

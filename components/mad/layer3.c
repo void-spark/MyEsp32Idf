@@ -2561,8 +2561,7 @@ int mad_layer_III(struct mad_stream *stream, struct mad_frame *frame)
     header->crc_check =
       mad_bit_crc(stream->ptr, si_len * CHAR_BIT, header->crc_check);
 
-    if (header->crc_check != header->crc_target &&
-	!(frame->options & MAD_OPTION_IGNORECRC)) {
+    if (header->crc_check != header->crc_target) {
       stream->error = MAD_ERROR_BADCRC;
       result = -1;
     }

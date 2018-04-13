@@ -75,8 +75,6 @@ void mad_decoder_init(struct mad_decoder *decoder, void *data,
 {
   decoder->mode         = -1;
 
-  decoder->options      = 0;
-
   decoder->async.pid    = 0;
   decoder->async.in     = -1;
   decoder->async.out    = -1;
@@ -342,8 +340,6 @@ int run_sync(struct mad_decoder *decoder)
   mad_stream_init(stream);
   mad_frame_init(frame);
   mad_synth_init(synth);
-
-  mad_stream_options(stream, decoder->options);
 
   do {
     switch (decoder->input_func(decoder->cb_data, stream)) {

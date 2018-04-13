@@ -92,8 +92,6 @@ void mad_frame_init(struct mad_frame *frame)
 {
   mad_header_init(&frame->header);
 
-  frame->options = 0;
-
   frame->overlap = 0;
   mad_frame_mute(frame);
 }
@@ -437,8 +435,6 @@ int mad_header_decode(struct mad_header *header, struct mad_stream *stream)
  */
 int mad_frame_decode(struct mad_frame *frame, struct mad_stream *stream)
 {
-  frame->options = stream->options;
-
   /* header() */
   /* error_check() */
 
