@@ -22,17 +22,10 @@
 # ifndef LIBMAD_FIXED_H
 # define LIBMAD_FIXED_H
 
-# if SIZEOF_INT >= 4
 typedef   signed int mad_fixed_t;
 
 typedef   signed int mad_fixed64hi_t;
 typedef unsigned int mad_fixed64lo_t;
-# else
-typedef   signed long mad_fixed_t;
-
-typedef   signed long mad_fixed64hi_t;
-typedef unsigned long mad_fixed64lo_t;
-# endif
 
 # if defined(_MSC_VER)
 #  define mad_fixed64_t  signed __int64
@@ -148,32 +141,11 @@ typedef mad_fixed_t mad_sample_t;
 
 /* default implementations */
 
-# if !defined(mad_f_mul)
-#  define mad_f_mul(x, y)  \
-    ({ register mad_fixed64hi_t __hi;  \
-       register mad_fixed64lo_t __lo;  \
-       MAD_F_MLX(__hi, __lo, (x), (y));  \
-       mad_f_scale64(__hi, __lo);  \
-    })
-# endif
-
 # if !defined(MAD_F_MLA)
 #  define MAD_F_ML0(hi, lo, x, y)	((lo)  = mad_f_mul((x), (y)))
 #  define MAD_F_MLA(hi, lo, x, y)	((lo) += mad_f_mul((x), (y)))
 #  define MAD_F_MLN(hi, lo)		((lo)  = -(lo))
 #  define MAD_F_MLZ(hi, lo)		((void) (hi), (mad_fixed_t) (lo))
-# endif
-
-# if !defined(MAD_F_ML0)
-#  define MAD_F_ML0(hi, lo, x, y)	MAD_F_MLX((hi), (lo), (x), (y))
-# endif
-
-# if !defined(MAD_F_MLN)
-#  define MAD_F_MLN(hi, lo)		((hi) = ((lo) = -(lo)) ? ~(hi) : -(hi))
-# endif
-
-# if !defined(MAD_F_MLZ)
-#  define MAD_F_MLZ(hi, lo)		mad_f_scale64((hi), (lo))
 # endif
 
 # if !defined(mad_f_scale64)
