@@ -24,7 +24,10 @@
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/log/include",
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/lwip/include/lwip",
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/lwip/include/lwip/port",
-                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/vfs/include"
+                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/vfs/include",
+                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/fatfs/src",
+                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/wear_levelling/include",
+                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/sdmmc/include"
             ],
             "browse": {
                 "path": [
