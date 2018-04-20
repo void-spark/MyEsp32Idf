@@ -18,6 +18,7 @@ extern "C" {
 }
 #include "LedBlink2.h"
 #include "RcReceiver.h"
+#include "doorbell_recv.h"
 #include "player.h"
 
 #define LED_BUILTIN GPIO_NUM_2
@@ -56,8 +57,12 @@ long ledPatternConnected[] = {100,900};
 
 long ledPatternRc[] = {150,150};
 
+long ledPatternDrb[] = {500, 500};
+
 LedBlink2 blinkerInt(LED_BUILTIN);
 LedBlink2 blinkerExt1(LED1_EXT);
+LedBlink2 blinkerExt2(LED2_EXT);
+
 
 RcReceiver rcReceiver(RC_BITS, 12);
 
@@ -69,11 +74,13 @@ strand_t strands[] = { {.rmtChannel = 0, .gpioNum = WS2812_1, .ledType = LED_WS2
 strand_t * strand = &strands[0];
 
 void printAc();
+void printDoorbell();
 
 IRAM_ATTR void myHandleInterrupt(void *) {
   const unsigned long time = esp_timer_get_time();
   //int state = digitalRead(RCV1_EXT);
   rcReceiver.handleInterrupt(time);
+  handleDoorbell(time);
   //digitalWrite(TMP_OUT, state);
 }
 
@@ -165,6 +172,31 @@ static void mqtt_app_start(void) {
 }
 
 
+
+extern "C" {
+    static void infoCallBack(TimerHandle_t xTimer) {
+        uint32_t nowFree  = esp_get_free_heap_size();        
+        uint32_t minimumFree = esp_get_minimum_free_heap_size();
+        printf("Free: %d (%dk), min: %d(%dk)\n", nowFree, nowFree/1024, minimumFree, minimumFree/1024);
+    }
+}
+
+static void taskRc(void *pvParameters) {
+    printf("rc start: %d bytes\n", uxTaskGetStackHighWaterMark(NULL));
+    while (true) {
+        printAc();
+        printf("rc: %d bytes\n", uxTaskGetStackHighWaterMark(NULL));
+    }
+}
+
+static void taskDrb(void *pvParameters) {
+    printf("drb start: %d bytes\n", uxTaskGetStackHighWaterMark(NULL));
+    while (true) {
+        printDoorbell();
+        printf("drb: %d bytes\n", uxTaskGetStackHighWaterMark(NULL));
+    }
+}
+
 extern "C" void app_main() {
 
     gpio_pad_select_gpio(WS2812_1);
@@ -225,6 +257,8 @@ extern "C" void app_main() {
 
     blinkerInt.setPattern(ledPatternConnected);
 
+    setupDoorbell();
+
     gpio_config_t io_conf;
     io_conf.pin_bit_mask = 1ULL << RCV1_EXT;
     io_conf.mode = GPIO_MODE_INPUT;
@@ -238,9 +272,18 @@ extern "C" void app_main() {
 
     playerStart();
 
-    while(true) {
-        printAc();
-    }
+    TimerHandle_t timer = xTimerCreate("infoTimer", pdMS_TO_TICKS(2000), pdTRUE, NULL, infoCallBack );
+    xTimerStart(timer, 0);
+    
+    if (xTaskCreatePinnedToCore(taskRc, "taskRc", configMINIMAL_STACK_SIZE + 2000, NULL, configMAX_PRIORITIES - 5, NULL, 1)!=pdPASS) {
+        printf("ERROR creating taskRc! Out of memory?\n");
+    };
+
+    if (xTaskCreatePinnedToCore(taskDrb, "taskDrb", configMINIMAL_STACK_SIZE + 2000, NULL, configMAX_PRIORITIES - 5, NULL, 1)!=pdPASS) {
+        printf("ERROR creating taskDrb! Out of memory?\n");
+    };
+
+    vTaskDelete(NULL);
 }
 
 
@@ -347,4 +390,41 @@ void printAc() {
         snprintf (msg, 50, "%s", stateOn ? "true" : "false"  );
         int msg_id = esp_mqtt_client_publish(mqttClient, topic, msg, 0, 0, 0);
     }
+}
+
+
+void printDoorbell() {
+  static uint8_t triggered[DRB_SEQ_LENGTH] = {};
+  static uint8_t last[DRB_SEQ_LENGTH] = {};
+
+  uint8_t* result = getDrbReceivedPulses();
+
+  bool sameAsTriggered = true;
+  bool sameAsLast = true;
+  for (int pos = 0; pos < DRB_SEQ_LENGTH; pos++) {
+    if (result[pos] != last[pos]) {
+      sameAsLast = false;
+    }
+    if (result[pos] != triggered[pos]) {
+      sameAsTriggered = false;
+    }
+    last[pos] = result[pos];
+  }
+  if (sameAsLast && !sameAsTriggered ) {
+    for (int pos = 0; pos < DRB_SEQ_LENGTH; pos++) {
+      triggered[pos] = result[pos];
+    }
+    blinkerExt2.setPattern(ledPatternDrb, 2);
+    printDoorbellWord(result, DRB_SEQ_LENGTH);
+
+    //startMarch(13);
+    // startSimple(13);
+
+    static char topic[50];
+    static char msg[50];
+    snprintf (topic, 50, "devices/receiver/doorbell/pushed");
+    snprintf (msg, 50, "%s", "true" );
+
+    int msg_id = esp_mqtt_client_publish(mqttClient, topic, msg, 0, 0, 0);
+  }
 }
