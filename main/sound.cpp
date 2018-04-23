@@ -1,23 +1,21 @@
 #include "math.h"
 #include "sound.h"
 #include "tunes.h"
+#include "i2s_sink.h"
 
-static i2s_port_t _port;
 static i2s_bits_per_sample_t _bits;
 static int _sampleRate;
 static double _vol;
 static double _top;
 
-void setup_triangle_sine_waves(i2s_port_t port, i2s_bits_per_sample_t bits, int sampleRate) {
-    _port = port;
+void setup_triangle_sine_waves(i2s_bits_per_sample_t bits, int sampleRate) {
     _sampleRate = sampleRate;
     _bits = bits;
     _vol = 0.4;
     _top = (pow(2, _bits)/2 - 1) * _vol;
 }
 
-static unsigned int calc() {
-
+static void calc() {
 
     const double noteSeconds = 2.000;//1.000;
     const double attack = 0.010;
@@ -56,7 +54,7 @@ static unsigned int calc() {
 
     if(waveFreqHz == 0) {
         noteSample++;
-        return 0;
+        renderSample16((uint16_t) 0, (uint16_t) 0);
     }
 
 
@@ -75,21 +73,18 @@ static unsigned int calc() {
    }
 
     double pi2 = M_TWOPI;
-    double sin_float = sin((noteSample * pi2) / samplePerCycle) * _top * envelope;
+    //double sin_float = sin((noteSample * pi2) / samplePerCycle) * _top * envelope;
+    
+    double sin_float = remainder((noteSample * 1.0f) / samplePerCycle, 1.0) * _top * envelope;
 
-    unsigned int sample_val = 0;
-    sample_val += (short) sin_float;
-    sample_val = sample_val << 16;
-    sample_val += (short) sin_float;
+    renderSample16((uint16_t) sin_float, (uint16_t) sin_float);
 
     noteSample++;
-    return sample_val;
 }
 
 void tsk_triangle_sine_waves(void *pvParameters) {
 
     while(true) {
-        unsigned int sample_val = calc();
-        i2s_push_sample(_port, (const char *)(&sample_val), portMAX_DELAY);
+        calc();
     }
 }

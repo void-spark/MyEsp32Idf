@@ -12,32 +12,17 @@
 #include "sdmmc_cmd.h"
 #include "esp_vfs.h"
 
-#include "i2sstuff.h"
+#include "i2s_sink.h"
 #include "sound.h"
 #include "mp3player.h"
 
 #include <lwip/sockets.h>
 #include <lwip/netdb.h>
 
-#include <mad.h>
-#include <stream.h>
-#include <frame.h>
-#include <synth.h>
-
-
 #define PIN_NUM_MISO GPIO_NUM_19
 #define PIN_NUM_MOSI GPIO_NUM_5
 #define PIN_NUM_CLK  GPIO_NUM_18
 #define PIN_NUM_CS GPIO_NUM_4
-
-
-#define BCK 23
-#define DIN 22
-#define LCK 21
-
-#define I2S_NUM         (I2S_NUM_0)
-
-#define LED3_EXT GPIO_NUM_25
 
 static RingbufHandle_t ringBuf = NULL;
 
@@ -56,19 +41,7 @@ static RingbufHandle_t ringBuf = NULL;
 }
 
 void playerSetup() {
-    //for 36Khz sample rates, we create 100Hz sine wave, every cycle need 36000/100 = 360 samples (4-bytes or 8-bytes each sample)
-    //depend on bits_per_sample
-    //using 6 buffers, we need 60-samples per buffer
-    //if 2-channels, 16-bit each channel, total buffer is 360*4 = 1440 bytes
-
-    // i2s_setup(I2S_NUM, BCK, LCK, DIN, 8, 64); // old pcm/mp3?
-    // i2s_setup(I2S_NUM, BCK, LCK, DIN, 6, 60, I2S_BITS_PER_SAMPLE_16BIT, 44100); //sine
-
-    i2s_setup(I2S_NUM, BCK, LCK, DIN, 8, 256, I2S_BITS_PER_SAMPLE_16BIT, 44100);
-
-    gpio_pad_select_gpio(LED3_EXT);
-    gpio_set_direction(LED3_EXT, GPIO_MODE_OUTPUT);
-    gpio_set_level(LED3_EXT, 0);
+    i2sSetup();
 }
 
 #define PRIO_MAD configMAX_PRIORITIES - 2
@@ -79,7 +52,7 @@ static void tsknet(void *pvParameters);
 static void tskpcm(void *pvParameters);
 
 void playerStart() {
-    // setup_triangle_sine_waves(I2S_NUM, I2S_BITS_PER_SAMPLE_16BIT, 44100);
+    // setup_triangle_sine_waves(I2S_BITS_PER_SAMPLE_16BIT, 44100);
 
     // if (xTaskCreatePinnedToCore(tsk_triangle_sine_waves, "tsk_triangle_sine_waves", 2000, NULL, PRIO_NET, NULL, 1)!=pdPASS) {
     //     printf("ERROR creating note task! Out of memory?\n");
@@ -100,25 +73,7 @@ void playerStart() {
 
 static mp3player_handle_t mp3Player = NULL;
 
-    // Bigger buffer, 32k? (dma buffer could be smaller? 32x64 for mp3 thing?)
-    // separate reading tcp/ writing to dma
-    // no wait > dma (0)
-
-    // Why does RC receiver no work anymore??? Logic analyzer influences!! everything is a bit big now.. :)
-    // POwer???? It's fine on the USB plug, or ground loop... 3 dev's
-     //I2S_EVENT_TX_DONE
-     //!!!! keep a volatile counter based on that :) (dun worklike that...)
-                // ouch!
-                // Second speaker, see if long leads work.
-                // Wifi, router mayby? sending side?? nodelay?? buffer size on sending size.. test speed with nothing else?
-                // Blinky light for buffer empty/buffer full!
-                // Move to cpp file, then commit
-                // Zero when buffer empty ? better then ugly noise?
-                // Good to measure voltage my old tomato :)
-
-static void tsknet(void *pvParameters) {
-
-
+static void playFile() {
     sdmmc_host_t host = SDSPI_HOST_DEFAULT_FIXED();
     sdspi_slot_config_t slot_config = SDSPI_SLOT_CONFIG_DEFAULT();
     slot_config.gpio_miso = PIN_NUM_MISO;
@@ -202,7 +157,29 @@ static void tsknet(void *pvParameters) {
     if (ret2 != ESP_OK) {
         printf("Failed to unmount the card (%s).\n", esp_err_to_name(ret2));
         vTaskDelete(NULL);
-    }
+    }    
+}
+
+    // Bigger buffer, 32k? (dma buffer could be smaller? 32x64 for mp3 thing?)
+    // separate reading tcp/ writing to dma
+    // no wait > dma (0)
+
+    // Why does RC receiver no work anymore??? Logic analyzer influences!! everything is a bit big now.. :)
+    // POwer???? It's fine on the USB plug, or ground loop... 3 dev's
+     //I2S_EVENT_TX_DONE
+     //!!!! keep a volatile counter based on that :) (dun worklike that...)
+                // ouch!
+                // Second speaker, see if long leads work.
+                // Wifi, router mayby? sending side?? nodelay?? buffer size on sending size.. test speed with nothing else?
+                // Blinky light for buffer empty/buffer full!
+                // Move to cpp file, then commit
+                // Zero when buffer empty ? better then ugly noise?
+                // Good to measure voltage my old tomato :)
+
+static void tsknet(void *pvParameters) {
+
+    // playFile();
+
 
     int sockfd = socket(AF_INET , SOCK_STREAM, 0);
     if (sockfd < 0) {
@@ -257,6 +234,10 @@ static void tsknet(void *pvParameters) {
 
         printf("Connected\n");
         mp3Player = mp3player_create(PRIO_MAD, ringBuf);
+        // TODO: Far less mem for pcm
+        // if (xTaskCreatePinnedToCore(tskpcm, "tskpcm", 16100, NULL, PRIO_MAD, NULL, 1) != pdPASS) {
+        //     printf("ERROR creating PCM task! Out of memory?\n");
+        // };
 
         const size_t bufsize = 256;
         uint8_t readBuf[bufsize] = {};
@@ -304,7 +285,6 @@ static void tsknet(void *pvParameters) {
 // Handler for pcm data
 static void tskpcm(void *pvParameters) {
     uint8_t writeBuf[256] = {};
-    unsigned int sampleBuf[sizeof(writeBuf)/4] = {};
 
     // Bytes left over, 0-3,
     int left = 0;
@@ -312,27 +292,21 @@ static void tskpcm(void *pvParameters) {
 
     while(true) {
         size_t receivedBytes = 0;
-        void * rbData = xRingbufferReceiveUpTo(ringBuf, &receivedBytes, portMAX_DELAY, sizeof(writeBuf) - left);
-        memcpy(writeBuf + left, rbData, receivedBytes);
-        vRingbufferReturnItem(ringBuf, rbData);
+        //TODO: This helps performance, but.. only partial, think context switching
+        // revert prio (same prob, lots of switching for single bytes)? fill up buffer until full (or nothing left to fill with), then handle?
+        // and/or sized chunks, regular que with size_t/data struct?
+        while(left != 256) {
+            void * rbData = xRingbufferReceiveUpTo(ringBuf, &receivedBytes, portMAX_DELAY, sizeof(writeBuf) - left);
+            memcpy(writeBuf + left, rbData, receivedBytes);
+            vRingbufferReturnItem(ringBuf, rbData);
+            left += receivedBytes;
+        }
 
-        const size_t buffered = left + receivedBytes;
+        const size_t buffered = left;
         const size_t usableSamples = buffered / 4;
         const size_t usableBytes = usableSamples * 4;
 
-        for(size_t pos = 0 ; pos < usableSamples; pos++) {
-            sampleBuf[pos] = 0;
-            sampleBuf[pos] |= writeBuf[0 + 4*pos];
-            sampleBuf[pos] <<= 8;
-            sampleBuf[pos] |= writeBuf[1 + 4*pos];
-            sampleBuf[pos] <<= 8;
-            sampleBuf[pos] |= writeBuf[2 + 4*pos];
-            sampleBuf[pos] <<= 8;
-            sampleBuf[pos] |= writeBuf[3 + 4*pos];
-        }
-
-        // Using portMAX_DELAY means this blocks till all bytes are written
-        i2s_write_bytes(I2S_NUM_0, (const char *)sampleBuf, usableBytes, portMAX_DELAY);
+        renderSamples32(writeBuf, usableSamples);
 
         for(int pos = usableBytes; pos < buffered ; pos++) {
             writeBuf[pos - usableBytes]  = writeBuf[pos];

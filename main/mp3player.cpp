@@ -10,6 +10,8 @@
 
 #include "sys/param.h"
 
+#include "i2s_sink.h"
+
 #include <mad.h>
 //#include <stream.h>
 #include <frame.h>
@@ -43,7 +45,7 @@ static void tskmad(void *pvParameters);
 
 mp3player_handle_t mp3player_create(int prio, RingbufHandle_t ringBuf) {
 
-    mp3player_handle_t player = calloc(1, sizeof(struct mp3player));
+    mp3player_handle_t player = (mp3player_handle_t)calloc(1, sizeof(struct mp3player));
 
     player->queueSet = xQueueCreateSet( 1 + 1 );
 
@@ -202,25 +204,5 @@ void set_dac_sample_rate(int rate) {
 /* render callback for the libmad synth */
 void render_sample_block(short *sample_buff_ch0, short *sample_buff_ch1, int num_samples, unsigned int num_channels) {
 
-    // Based on synth.c, at most 32 samples at a time.
-    static char sampleBuf[32 * 2 * 2] = {};
-
-    for(int pos = 0 ; pos < MIN(32, num_samples); pos++) {
-        short ch0Sample = sample_buff_ch0[pos] / 2;
-        short ch1Sample = sample_buff_ch1[pos] / 2;
-
-        sampleBuf[pos * 4 ] = ch0Sample & 0xff;
-        sampleBuf[pos * 4 + 1] = (ch0Sample >> 8) & 0xff;
-
-        sampleBuf[pos * 4 + 2] = ch1Sample  & 0xff;
-        sampleBuf[pos * 4 + 3] = (ch1Sample >> 8) & 0xff;
-    }
-    int sampleBytes = num_samples * 4;
-    unsigned int bufPos = 0;
-    while(sampleBytes - bufPos > 0) {
-        int written = i2s_write_bytes(I2S_NUM_0, ((const char *)sampleBuf) + bufPos, sampleBytes - bufPos, portMAX_DELAY);
-        bufPos += written;
-    }
-
-    return;
+    renderSamples16(sample_buff_ch0, sample_buff_ch1, num_samples);
 }
