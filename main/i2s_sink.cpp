@@ -74,8 +74,8 @@ void renderSamples16(int16_t *samplesLeft, int16_t *samplesRight, size_t num_sam
     static char sampleBuf[32 * 2 * 2] = {};
 
     for(int pos = 0 ; pos < MIN(32, num_samples); pos++) {
-        uint16_t ch0Sample = samplesLeft[pos] / 2;
-        uint16_t ch1Sample = samplesRight[pos] / 2;
+        uint16_t ch0Sample = samplesLeft[pos];// / 2;
+        uint16_t ch1Sample = samplesRight[pos];// / 2;
 
         sampleBuf[pos * 4 ] = ch0Sample & 0xff;
         sampleBuf[pos * 4 + 1] = (ch0Sample >> 8) & 0xff;
