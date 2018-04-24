@@ -26,20 +26,6 @@
 
 static RingbufHandle_t ringBuf = NULL;
 
-#define SDSPI_HOST_DEFAULT_FIXED() {\
-    .flags = SDMMC_HOST_FLAG_SPI, \
-    .slot = HSPI_HOST, \
-    .max_freq_khz = SDMMC_FREQ_DEFAULT, \
-    .io_voltage = 3.3f, \
-    .init = &sdspi_host_init, \
-    .set_bus_width = NULL, \
-    .get_bus_width = NULL, \
-    .set_card_clk = &sdspi_host_set_card_clk, \
-    .do_transaction = &sdspi_host_do_transaction, \
-    .deinit = &sdspi_host_deinit, \
-    .command_timeout_ms = 0, \
-}
-
 void playerSetup() {
     i2sSetup();
 }
@@ -74,7 +60,7 @@ void playerStart() {
 static mp3player_handle_t mp3Player = NULL;
 
 static void playFile() {
-    sdmmc_host_t host = SDSPI_HOST_DEFAULT_FIXED();
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
     sdspi_slot_config_t slot_config = SDSPI_SLOT_CONFIG_DEFAULT();
     slot_config.gpio_miso = PIN_NUM_MISO;
     slot_config.gpio_mosi = PIN_NUM_MOSI;
