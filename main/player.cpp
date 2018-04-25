@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "freertos/ringbuf.h"
 
 #include "driver/i2s.h"
@@ -24,7 +25,7 @@
 #define PIN_NUM_CLK  GPIO_NUM_18
 #define PIN_NUM_CS GPIO_NUM_4
 
-static RingbufHandle_t ringBuf = NULL;
+static QueueHandle_t soundData = NULL;
 
 void playerSetup() {
     i2sSetup();
@@ -37,6 +38,8 @@ static void tsknet(void *pvParameters);
 
 static void tskpcm(void *pvParameters);
 
+#define SOUND_DATA_QUEUE_LEN 8
+
 void playerStart() {
     // setup_triangle_sine_waves(I2S_BITS_PER_SAMPLE_16BIT, 44100);
 
@@ -45,10 +48,8 @@ void playerStart() {
     // };
     
 
-
-
-    printf("Create ringbuf\n");
-    ringBuf = xRingbufferCreate(12*1024, RINGBUF_TYPE_BYTEBUF); // was 16*
+    printf("Create sound data queue\n");
+    soundData = xQueueCreate(SOUND_DATA_QUEUE_LEN, sizeof(dataBlock));
 
     printf("Create NET task\n");
     if (xTaskCreatePinnedToCore(tsknet, "tsknet", 1024*3, NULL, PRIO_NET, NULL, 1)!=pdPASS) {
@@ -114,23 +115,22 @@ static void playFile() {
     }
 
     printf("Creating mp3 player\n");
-    mp3Player = mp3player_create(PRIO_MAD, ringBuf);
-    const size_t bufsize2 = 256;
-    uint8_t readBuf2[bufsize2] = {};
+    mp3Player = mp3player_create(PRIO_MAD, SOUND_DATA_QUEUE_LEN, soundData);
 
     printf("Reading file\n");
+    struct dataBlock data = {};
     size_t filesize = 0;
     while(true) {
-        size_t bytesRead2 = fread(readBuf2, 1, bufsize2, f);
-        if(bytesRead2 == 0) {
+        data.used = fread(data.data, 1, DATA_BLOCK_SIZE, f);
+        if(data.used == 0) {
             if(ferror(f)) {
                 printf("Failed to read file: %s\n", strerror(errno));
                 vTaskDelete(NULL);
             }
             break;
         }
-        filesize += bytesRead2;
-        xRingbufferSend(ringBuf, readBuf2, bytesRead2, portMAX_DELAY);
+        filesize += data.used;
+        xQueueSendToBack(soundData, &data, portMAX_DELAY);
     }
     printf("Closing mp3 file, read: %d\n", filesize);
     fclose(f);
@@ -144,6 +144,39 @@ static void playFile() {
         printf("Failed to unmount the card (%s).\n", esp_err_to_name(ret2));
         vTaskDelete(NULL);
     }    
+}
+
+static bool readFully(struct dataBlock* block, int client_sock) {
+    // TODO: Leftovers from close
+    block->used = 0;
+    while(block->used < DATA_BLOCK_SIZE) {
+        int bytesRead = read(client_sock, block->data +  block->used, DATA_BLOCK_SIZE -  block->used);
+        if(bytesRead < 0) {
+            bool connected;
+            switch (errno) {
+                case ENOTCONN:
+                case EPIPE:
+                case ECONNRESET:
+                case ECONNREFUSED:
+                case ECONNABORTED:
+                    connected = false;
+                    break;
+                default:
+                    // Still connected ???
+                    connected = true;
+                    break;
+            }
+
+            if(!connected) {
+                return false;
+            }
+
+            // Try again??
+            continue;
+        }
+        block->used += bytesRead;
+    }
+    return true;
 }
 
     // Bigger buffer, 32k? (dma buffer could be smaller? 32x64 for mp3 thing?)
@@ -164,7 +197,7 @@ static void playFile() {
 
 static void tsknet(void *pvParameters) {
 
-    // playFile();
+    playFile();
 
 
     int sockfd = socket(AF_INET , SOCK_STREAM, 0);
@@ -219,50 +252,27 @@ static void tsknet(void *pvParameters) {
         }
 
         printf("Connected\n");
-        mp3Player = mp3player_create(PRIO_MAD, ringBuf);
+        mp3Player = mp3player_create(PRIO_MAD, SOUND_DATA_QUEUE_LEN, soundData);
         // TODO: Far less mem for pcm
         // if (xTaskCreatePinnedToCore(tskpcm, "tskpcm", 16100, NULL, PRIO_MAD, NULL, 1) != pdPASS) {
         //     printf("ERROR creating PCM task! Out of memory?\n");
         // };
 
-        const size_t bufsize = 256;
-        uint8_t readBuf[bufsize] = {};
+        struct dataBlock data = {};
 
         while(true) {
+            if(!readFully(&data, client_sock)) {
+                close(client_sock);
 
-            int bytesRead = read(client_sock, readBuf, bufsize);
-            if(bytesRead < 0) {
-                bool connected;
-                switch (errno) {
-                    case ENOTCONN:
-                    case EPIPE:
-                    case ECONNRESET:
-                    case ECONNREFUSED:
-                    case ECONNABORTED:
-                        connected = false;
-                        break;
-                    default:
-                        // Still connected ???
-                        connected = true;
-                        break;
-                }
+                printf("Disconnected\n");
+    // TODO: Clear/delete ring buffer? Mayby in the mp3 player? method for that.. :)
+    //                receiveBuffer.skipData(receiveBuffer.bufferedBytes());
 
-                if(!connected) {
-                    close(client_sock);
+                mp3player_destroy(mp3Player);
 
-                    printf("Disconnected\n");
-        // TODO: Clear/delete ring buffer? Mayby in the mp3 player? method for that.. :)
-        //                receiveBuffer.skipData(receiveBuffer.bufferedBytes());
-
-                    mp3player_destroy(mp3Player);
-                    break;
-                }
-
-                // Try again??
-                continue;
-
+                break;
             }
-            xRingbufferSend(ringBuf, readBuf, bytesRead, portMAX_DELAY);
+            xQueueSendToBack(soundData, &data, portMAX_DELAY);
         }
     }
 
@@ -270,34 +280,17 @@ static void tsknet(void *pvParameters) {
 
 // Handler for pcm data
 static void tskpcm(void *pvParameters) {
-    uint8_t writeBuf[256] = {};
-
-    // Bytes left over, 0-3,
-    int left = 0;
-
-
+    struct dataBlock data = {};
     while(true) {
-        size_t receivedBytes = 0;
         //TODO: This helps performance, but.. only partial, think context switching
         // revert prio (same prob, lots of switching for single bytes)? fill up buffer until full (or nothing left to fill with), then handle?
-        // and/or sized chunks, regular que with size_t/data struct?
-        while(left != 256) {
-            void * rbData = xRingbufferReceiveUpTo(ringBuf, &receivedBytes, portMAX_DELAY, sizeof(writeBuf) - left);
-            memcpy(writeBuf + left, rbData, receivedBytes);
-            vRingbufferReturnItem(ringBuf, rbData);
-            left += receivedBytes;
-        }
 
-        const size_t buffered = left;
-        const size_t usableSamples = buffered / 4;
-        const size_t usableBytes = usableSamples * 4;
 
-        renderSamples32(writeBuf, usableSamples);
-
-        for(int pos = usableBytes; pos < buffered ; pos++) {
-            writeBuf[pos - usableBytes]  = writeBuf[pos];
-        }
-        left = buffered - usableBytes;
+/// YO! pre allocated buffers, x the size of the queue, stick pointers on queue. No.. doh
+// Idea: can't put new one on, till there is space in the queue, which means one is free, but that doesn't work in many ways.
+        xQueueReceive(soundData, &data, portMAX_DELAY);
+        // TODO: What if data is not a multiple of 4? ..
+        renderSamples32(data.data, data.used / 4);
     }
 }
 

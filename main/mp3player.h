@@ -3,7 +3,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/ringbuf.h"
+#include "freertos/queue.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -11,7 +11,7 @@ extern "C" {
 
 typedef struct mp3player* mp3player_handle_t;
 
-mp3player_handle_t mp3player_create(int prio, RingbufHandle_t ringBuf);
+mp3player_handle_t mp3player_create(int prio, int inputQueueLen, QueueHandle_t inputQueue);
 void mp3player_destroy(mp3player_handle_t player);
 
 #ifdef __cplusplus

@@ -4,7 +4,6 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/ringbuf.h"
 
 #include "driver/i2s.h"
 
@@ -27,7 +26,7 @@
 #define MIN_FRAME_SIZE (32)
 
 struct mp3player {
-    RingbufHandle_t ringBuf;
+    QueueHandle_t inputQueue;
     QueueSetHandle_t queueSet;
     SemaphoreHandle_t stopSemaphore;
     SemaphoreHandle_t stoppedSemaphore;
@@ -43,19 +42,19 @@ struct mp3player {
 
 static void tskmad(void *pvParameters);
 
-mp3player_handle_t mp3player_create(int prio, RingbufHandle_t ringBuf) {
+mp3player_handle_t mp3player_create(int prio, int inputQueueLen, QueueHandle_t inputQueue) {
 
     mp3player_handle_t player = (mp3player_handle_t)calloc(1, sizeof(struct mp3player));
 
-    player->queueSet = xQueueCreateSet( 1 + 1 );
+    player->queueSet = xQueueCreateSet(1 + inputQueueLen);
 
 
     player->stopSemaphore = xSemaphoreCreateBinary();
     player->stoppedSemaphore = xSemaphoreCreateBinary();
 
-    player->ringBuf = ringBuf;
+    player->inputQueue = inputQueue;
 
-    xRingbufferAddToQueueSetRead(player->ringBuf, player->queueSet);
+    xQueueAddToSet(player->inputQueue, player->queueSet);
     xQueueAddToSet(player->stopSemaphore, player->queueSet);
 
 
@@ -94,7 +93,7 @@ void mp3player_destroy(mp3player_handle_t player) {
 
 
     xQueueRemoveFromSet(player->stopSemaphore, player->queueSet);
-    xRingbufferRemoveFromQueueSetRead(player->ringBuf, player->queueSet);
+    xQueueRemoveFromSet(player->inputQueue, player->queueSet);
 
     vQueueDelete(player->stoppedSemaphore);
     vQueueDelete(player->stopSemaphore);
@@ -151,6 +150,7 @@ static void tskmad(void *pvParameters) {
 
     printf("MP3 player reporting: %p\n", player);
 
+    struct dataBlock data = {};
     while(true) {
         QueueSetMemberHandle_t activatedMember = xQueueSelectFromSet(player->queueSet, portMAX_DELAY);
         if(activatedMember == player->stopSemaphore) {           
@@ -165,19 +165,16 @@ static void tskmad(void *pvParameters) {
             vTaskDelete(NULL);
             return;
         } else {
-            while(true) {
-                // ring buffer read mutex
-                size_t spaceLeft = sizeof(player->writeBuf) - (player->writeBufEnd - player->writeBuf);
+            // input data queue
+            xQueueReceive(player->inputQueue, &data, 0);
+            int dataPos = 0;
 
-                size_t bytesReceived = 0;
-                void * received = xRingbufferReceiveUpTo(player->ringBuf, &bytesReceived, 0, spaceLeft);
-                if(received == NULL) {
-                    // We need to wait again
-                    break;
-                }
-                memcpy(player->writeBufEnd, received, bytesReceived);
-                player->writeBufEnd += bytesReceived;
-                vRingbufferReturnItem(player->ringBuf, received);
+            while(dataPos != data.used) {
+                size_t spaceLeft = sizeof(player->writeBuf) - (player->writeBufEnd - player->writeBuf);
+                size_t toUse = MIN(spaceLeft, data.used - dataPos);
+                memcpy(player->writeBufEnd, data.data + dataPos, toUse);
+                player->writeBufEnd += toUse;
+                dataPos += toUse;
 
                 // Okay, let MAD decode the buffer.
                 unsigned long used = decode(player, player->writeBuf, player->writeBufEnd - player->writeBuf);

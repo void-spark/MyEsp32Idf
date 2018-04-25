@@ -42,7 +42,8 @@
             "defines": [
                 "ESP_PLATFORM",
                 "configUSE_TIMERS=1",
-                "configSUPPORT_DYNAMIC_ALLOCATION=1"
+                "configSUPPORT_DYNAMIC_ALLOCATION=1",
+                "configUSE_QUEUE_SETS=1"
             ],
             "intelliSenseMode": "clang-x64",
             "cStandard": "c11",
