@@ -38,7 +38,8 @@ static void tsknet(void *pvParameters);
 
 static void tskpcm(void *pvParameters);
 
-#define SOUND_DATA_QUEUE_LEN 8
+//#define SOUND_DATA_QUEUE_LEN 8
+#define SOUND_DATA_QUEUE_LEN 64
 
 void playerStart() {
     // setup_triangle_sine_waves(I2S_BITS_PER_SAMPLE_16BIT, 44100);
@@ -60,7 +61,7 @@ void playerStart() {
 
 static mp3player_handle_t mp3Player = NULL;
 
-static void playFile() {
+static bool mountCard() {
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
     sdspi_slot_config_t slot_config = SDSPI_SLOT_CONFIG_DEFAULT();
     slot_config.gpio_miso = PIN_NUM_MISO;
@@ -84,16 +85,30 @@ static void playFile() {
             printf("Failed to initialize the card (%s). "
                 "Make sure SD card lines have pull-up resistors in place.\n", esp_err_to_name(ret));
         }
-        vTaskDelete(NULL);
+        return false;
     }
 
     // Card has been initialized, print its properties
     sdmmc_card_print_info(stdout, card);
 
-    DIR* dir = opendir("/sdcard/MUSIC");
+    return true;
+}
+
+static bool unmountCard() {
+    esp_err_t ret2 = esp_vfs_fat_sdmmc_unmount();
+    if (ret2 != ESP_OK)
+    {
+        printf("Failed to unmount the card (%s).\n", esp_err_to_name(ret2));
+        return false;
+    }
+    return true;
+}
+
+static bool printDir(const char* name) {
+    DIR* dir = opendir(name);
     if(dir == NULL) {
         printf("Failed to open dir: %s\n", strerror(errno));
-        vTaskDelete(NULL);
+        return false;
     }
     while (true) {
         struct dirent* de = readdir(dir);
@@ -104,8 +119,19 @@ static void playFile() {
     }
     if(closedir(dir) < 0) {
         printf("Failed to close dir: %s\n", strerror(errno));
+        return false;
+    }
+    return true;
+}
+
+static void playFile() {
+    if (!mountCard()) {
         vTaskDelete(NULL);
-    }        
+    }
+
+    if(!printDir("/sdcard/MUSIC")) {
+        vTaskDelete(NULL);
+    }
 
     printf("Opening mp3 file\n");
     FILE* f = fopen("/sdcard/MUSIC/ENGLIS~1.MP3", "rb");
@@ -113,9 +139,6 @@ static void playFile() {
         printf("Failed to open file for reading: %s\n", strerror(errno));
         vTaskDelete(NULL);
     }
-
-    printf("Creating mp3 player\n");
-    mp3Player = mp3player_create(PRIO_MAD, SOUND_DATA_QUEUE_LEN, soundData);
 
     printf("Reading file\n");
     struct dataBlock data = {};
@@ -130,18 +153,16 @@ static void playFile() {
             break;
         }
         filesize += data.used;
+        data.reset = false;
         xQueueSendToBack(soundData, &data, portMAX_DELAY);
     }
     printf("Closing mp3 file, read: %d\n", filesize);
     fclose(f);
 
-    printf("Destroying mp3 player\n");
-    mp3player_destroy(mp3Player);
-    
+    data.reset = true;
+    xQueueSendToBack(soundData, &data, portMAX_DELAY);
 
-    esp_err_t ret2 = esp_vfs_fat_sdmmc_unmount();
-    if (ret2 != ESP_OK) {
-        printf("Failed to unmount the card (%s).\n", esp_err_to_name(ret2));
+    if (!unmountCard()) {
         vTaskDelete(NULL);
     }    
 }
@@ -197,8 +218,11 @@ static bool readFully(struct dataBlock* block, int client_sock) {
 
 static void tsknet(void *pvParameters) {
 
-    playFile();
+    printf("Creating MP3 player...\n");
+    mp3Player = mp3player_create(PRIO_MAD, SOUND_DATA_QUEUE_LEN, soundData);
+    printf("MP3 player created\n");
 
+    //playFile();
 
     int sockfd = socket(AF_INET , SOCK_STREAM, 0);
     if (sockfd < 0) {
@@ -252,7 +276,6 @@ static void tsknet(void *pvParameters) {
         }
 
         printf("Connected\n");
-        mp3Player = mp3player_create(PRIO_MAD, SOUND_DATA_QUEUE_LEN, soundData);
         // TODO: Far less mem for pcm
         // if (xTaskCreatePinnedToCore(tskpcm, "tskpcm", 16100, NULL, PRIO_MAD, NULL, 1) != pdPASS) {
         //     printf("ERROR creating PCM task! Out of memory?\n");
@@ -265,17 +288,23 @@ static void tsknet(void *pvParameters) {
                 close(client_sock);
 
                 printf("Disconnected\n");
-    // TODO: Clear/delete ring buffer? Mayby in the mp3 player? method for that.. :)
-    //                receiveBuffer.skipData(receiveBuffer.bufferedBytes());
 
-                mp3player_destroy(mp3Player);
+                data.reset = true;
+                xQueueSendToBack(soundData, &data, portMAX_DELAY);
 
                 break;
             }
+            data.reset = false;
             xQueueSendToBack(soundData, &data, portMAX_DELAY);
         }
     }
 
+
+    printf("Destroying MP3 player...\n");
+    mp3player_destroy(mp3Player);
+    printf("MP3 player destroyed\n");
+
+    vTaskDelete(NULL);
 }
 
 // Handler for pcm data

@@ -47,7 +47,7 @@ void i2sSetup() {
     // i2s_setup(I2S_NUM, BCK, LCK, DIN, 8, 64); // old pcm/mp3?
     // i2s_setup(I2S_NUM, BCK, LCK, DIN, 6, 60, I2S_BITS_PER_SAMPLE_16BIT, 44100); //sine
 
-    i2s_setup(I2S_NUM, BCK, LCK, DIN, 8, 256, I2S_BITS_PER_SAMPLE_16BIT, 44100);
+    i2s_setup(I2S_NUM, BCK, LCK, DIN, I2S_BUF_COUNT, I2S_BUF_SIZE, I2S_BITS_PER_SAMPLE_16BIT, 44100);
 }
 
 
@@ -107,4 +107,15 @@ void renderSamples32(uint8_t *samples32, size_t num_samples) {
 
     // Using portMAX_DELAY means this blocks till all bytes are written
     i2s_write_bytes(I2S_NUM_0, (const char *)sampleBuf, num_samples * 4, portMAX_DELAY);
+}
+
+/**
+ * Fill the entire I2S buffer with silence, but only after playing what's left.
+ */
+void silenceBuffers() {
+    int8_t empty[I2S_BUF_SIZE] = {};
+    for (int pos = 0; pos < I2S_BUF_COUNT * 4; pos++) {
+        // Using portMAX_DELAY means this blocks till all bytes are written
+        i2s_write_bytes(I2S_NUM_0, (const char *)empty, I2S_BUF_SIZE, portMAX_DELAY);
+    }
 }

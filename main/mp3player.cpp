@@ -169,6 +169,22 @@ static void tskmad(void *pvParameters) {
             xQueueReceive(player->inputQueue, &data, 0);
             int dataPos = 0;
 
+            if(data.reset) {
+                // Wipe the buffers.
+                silenceBuffers();
+                // Clear any partial frame left.
+                player->writeBufEnd = player->writeBuf;
+                // Re-init m3 data??
+                mad_frame_finish(player->frame);
+                mad_stream_finish(player->stream);
+                mad_synth_finish(player->synth);
+
+                mad_frame_init(player->frame);
+                mad_stream_init(player->stream);
+                mad_synth_init(player->synth);
+                continue;
+            }
+
             while(dataPos != data.used) {
                 size_t spaceLeft = sizeof(player->writeBuf) - (player->writeBufEnd - player->writeBuf);
                 size_t toUse = MIN(spaceLeft, data.used - dataPos);
