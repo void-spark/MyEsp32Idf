@@ -7,7 +7,6 @@
                 "${workspaceFolder}/build/include",
                 "${workspaceFolder}/components/esp32_digital_led_lib/include",
                 "${workspaceFolder}/components/LedBlink2/include",
-                "${workspaceFolder}/components/espmqtt/include",
                 "${workspaceFolder}/components/mad/include",
                 "C:/Portable/msys32-esp32-20180110/opt/xtensa-esp32-elf/lib/gcc/xtensa-esp32-elf/5.2.0/include",
                 "C:/Portable/msys32-esp32-20180110/opt/xtensa-esp32-elf/xtensa-esp32-elf/include/c++/5.2.0",
@@ -24,10 +23,16 @@
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/log/include",
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/lwip/include/lwip",
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/lwip/include/lwip/port",
+                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/mqtt/esp-mqtt/include",
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/vfs/include",
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/fatfs/src",
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/wear_levelling/include",
-                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/sdmmc/include"
+                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/sdmmc/include",
+                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/lwip/lwip/src/include",
+                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/lwip/port/esp32/include",
+                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/newlib/platform_include",
+                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/lwip/include/apps",
+                "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/esp_ringbuf/include"
             ],
             "browse": {
                 "path": [
@@ -50,5 +55,5 @@
             "cppStandard": "c++11"
         }
     ],
-    "version": 3
+    "version": 4
 }

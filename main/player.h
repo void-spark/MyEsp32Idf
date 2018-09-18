@@ -4,4 +4,6 @@
 void playerSetup();
 void playerStart();
 
+void go();
+
 #endif

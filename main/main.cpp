@@ -13,9 +13,7 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "esp32_digital_led_lib.h"
-extern "C" {
 #include "mqtt_client.h"
-}
 #include "LedBlink2.h"
 #include "RcReceiver.h"
 #include "doorbell_recv.h"
@@ -163,8 +161,9 @@ void wifi_init_sta() {
 
 
 static void mqtt_app_start(void) {
+    
     esp_mqtt_client_config_t mqtt_cfg = {};
-    strcpy(mqtt_cfg.uri, mqtt_server);
+    mqtt_cfg.uri = mqtt_server;
     mqtt_cfg.event_handle = mqtt_event_handler;
 
     mqttClient = esp_mqtt_client_init(&mqtt_cfg);
@@ -377,6 +376,9 @@ void printAc() {
         printf("Switch %d: %s\n", address + 1, stateOn ? "ON" : "OFF");
 
         if(stateOn) {
+            // if(address == 0) {
+            //     go();
+            // }
             strand->pixels[address] = pixelFromRGB(0, 0, 40);
         } else {
             strand->pixels[address] = pixelFromRGB(0, 0, 0);
@@ -414,7 +416,7 @@ void printDoorbell() {
     for (int pos = 0; pos < DRB_SEQ_LENGTH; pos++) {
       triggered[pos] = result[pos];
     }
-    blinkerExt2.setPattern(ledPatternDrb, 2);
+    blinkerExt2.setPattern(ledPatternDrb, 10);
     printDoorbellWord(result, DRB_SEQ_LENGTH);
 
     //startMarch(13);
@@ -426,5 +428,7 @@ void printDoorbell() {
     snprintf (msg, 50, "%s", "true" );
 
     int msg_id = esp_mqtt_client_publish(mqttClient, topic, msg, 0, 0, 0);
+
+    go();
   }
 }

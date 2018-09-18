@@ -8,6 +8,7 @@
 
 #include "driver/i2s.h"
 
+#include "esp_system.h"
 #include "esp_vfs_fat.h"
 #include "driver/sdspi_host.h"
 #include "sdmmc_cmd.h"
@@ -26,6 +27,8 @@
 #define PIN_NUM_CS GPIO_NUM_4
 
 static QueueHandle_t soundData = NULL;
+static SemaphoreHandle_t goSemaphore = NULL;
+
 
 void playerSetup() {
     i2sSetup();
@@ -51,6 +54,7 @@ void playerStart() {
 
     printf("Create sound data queue\n");
     soundData = xQueueCreate(SOUND_DATA_QUEUE_LEN, sizeof(dataBlock));
+    goSemaphore = xSemaphoreCreateBinary();
 
     printf("Create NET task\n");
     if (xTaskCreatePinnedToCore(tsknet, "tsknet", 1024*3, NULL, PRIO_NET, NULL, 1)!=pdPASS) {
@@ -124,20 +128,12 @@ static bool printDir(const char* name) {
     return true;
 }
 
-static void playFile() {
-    if (!mountCard()) {
-        vTaskDelete(NULL);
-    }
-
-    if(!printDir("/sdcard/MUSIC")) {
-        vTaskDelete(NULL);
-    }
-
+static bool playFile(const char* name) {
     printf("Opening mp3 file\n");
-    FILE* f = fopen("/sdcard/MUSIC/ENGLIS~1.MP3", "rb");
+    FILE* f = fopen(name, "rb");
     if (f == NULL) {
         printf("Failed to open file for reading: %s\n", strerror(errno));
-        vTaskDelete(NULL);
+        return false;
     }
 
     printf("Reading file\n");
@@ -148,7 +144,7 @@ static void playFile() {
         if(data.used == 0) {
             if(ferror(f)) {
                 printf("Failed to read file: %s\n", strerror(errno));
-                vTaskDelete(NULL);
+                return false;
             }
             break;
         }
@@ -161,6 +157,73 @@ static void playFile() {
 
     data.reset = true;
     xQueueSendToBack(soundData, &data, portMAX_DELAY);
+
+    return true;
+}
+
+static void playSong() {
+    if (!mountCard()) {
+        vTaskDelete(NULL);
+    }
+
+    DIR* dir = opendir("/sdcard/songs");
+    if(dir == NULL) {
+        printf("Failed to open dir: %s\n", strerror(errno));
+        vTaskDelete(NULL);
+    }
+    uint32_t songs = 0;
+    while (true) {
+        struct dirent* de = readdir(dir);
+        if (!de) {
+            break;
+        }
+        songs++;
+    }
+    rewinddir(dir);
+    uint32_t selected = esp_random() % songs;
+    uint32_t pos = 0;
+    struct dirent* deSelected;
+    while (true) {
+        deSelected = readdir(dir);
+        if(pos == selected) {
+            break;
+        }
+        pos++;
+    }    
+
+    printf("Selected: %s\n", deSelected->d_name);
+
+    char fullPath[strlen(deSelected->d_name) + 20];
+    snprintf(fullPath, sizeof(fullPath), "/sdcard/songs/%s", deSelected->d_name);
+
+    if(closedir(dir) < 0) {
+        printf("Failed to close dir: %s\n", strerror(errno));
+        vTaskDelete(NULL);
+    }
+
+
+    if (!playFile(fullPath)) {
+        vTaskDelete(NULL);
+    }
+
+
+    if (!unmountCard()) {
+        vTaskDelete(NULL);
+    }    
+}
+
+static void playFile() {
+    if (!mountCard()) {
+        vTaskDelete(NULL);
+    }
+
+    if(!printDir("/sdcard/MUSIC")) {
+        vTaskDelete(NULL);
+    }
+
+    if (!playFile("/sdcard/MUSIC/ENGLIS~1.MP3")) {
+        vTaskDelete(NULL);
+    }
 
     if (!unmountCard()) {
         vTaskDelete(NULL);
@@ -200,20 +263,19 @@ static bool readFully(struct dataBlock* block, int client_sock) {
     return true;
 }
 
+
+void go() {
+    xSemaphoreGive(goSemaphore);
+}
     // Bigger buffer, 32k? (dma buffer could be smaller? 32x64 for mp3 thing?)
     // separate reading tcp/ writing to dma
     // no wait > dma (0)
 
     // Why does RC receiver no work anymore??? Logic analyzer influences!! everything is a bit big now.. :)
     // POwer???? It's fine on the USB plug, or ground loop... 3 dev's
-     //I2S_EVENT_TX_DONE
-     //!!!! keep a volatile counter based on that :) (dun worklike that...)
-                // ouch!
-                // Second speaker, see if long leads work.
                 // Wifi, router mayby? sending side?? nodelay?? buffer size on sending size.. test speed with nothing else?
                 // Blinky light for buffer empty/buffer full!
                 // Move to cpp file, then commit
-                // Zero when buffer empty ? better then ugly noise?
                 // Good to measure voltage my old tomato :)
 
 static void tsknet(void *pvParameters) {
@@ -222,7 +284,14 @@ static void tsknet(void *pvParameters) {
     mp3Player = mp3player_create(PRIO_MAD, SOUND_DATA_QUEUE_LEN, soundData);
     printf("MP3 player created\n");
 
-    //playFile();
+// Wait for sem doorbell, sem random song, connection(?), or conn data?
+    while(true) {
+        //playSong();
+        if(xSemaphoreTake(goSemaphore, portMAX_DELAY)) {
+            playFile();
+        }
+    }
+
 
     int sockfd = socket(AF_INET , SOCK_STREAM, 0);
     if (sockfd < 0) {
