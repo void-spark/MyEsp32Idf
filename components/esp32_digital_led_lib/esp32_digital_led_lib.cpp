@@ -65,7 +65,8 @@ extern int digitalLeds_debugBufferSz;
 
 static DRAM_ATTR const uint16_t MAX_PULSES = 32;  // A channel has a 64 "pulse" buffer - we use half per pass
 static DRAM_ATTR const uint16_t DIVIDER    =  4;  // 8 still seems to work, but timings become marginal
-static DRAM_ATTR const double   RMT_DURATION_NS = 12.5;  // Minimum time of a single RMT duration based on clock ns
+// Minimum time of a single RMT duration based on clock ns (1 second / 80mhz)
+static DRAM_ATTR const double   RMT_DURATION_NS = 12.5;
 
 // LUT for mapping bits in RMT.int_<op>.ch<n>_tx_thr_event
 static DRAM_ATTR const uint32_t tx_thr_event_offsets [] = {
@@ -131,12 +132,6 @@ int digitalLeds_initStrands(strand_t strands [], int numStrands)
     return -1;
   }
 
-  DPORT_SET_PERI_REG_MASK(DPORT_PERIP_CLK_EN_REG, DPORT_RMT_CLK_EN);
-  DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_RMT_RST);
-
-  RMT.apb_conf.fifo_mask = 1;  // Enable memory access, instead of FIFO mode
-  RMT.apb_conf.mem_tx_wrap_en = 1;  // Wrap around when hitting end of buffer
-
   for (int i = 0; i < localStrandCnt; i++) {
     strand_t * pStrand = &localStrands[i];
     ledParams_t ledParams = ledParamsAll[pStrand->ledType];
@@ -159,25 +154,32 @@ int digitalLeds_initStrands(strand_t strands [], int numStrands)
     }
     pState->sem = nullptr;
 
-    rmt_set_pin(
-      static_cast<rmt_channel_t>(pStrand->rmtChannel),
-      RMT_MODE_TX,
-      static_cast<gpio_num_t>(pStrand->gpioNum));
-  
-    RMT.conf_ch[pStrand->rmtChannel].conf0.div_cnt = DIVIDER;
-    RMT.conf_ch[pStrand->rmtChannel].conf0.mem_size = 1;
-    RMT.conf_ch[pStrand->rmtChannel].conf0.carrier_en = 0;
-    RMT.conf_ch[pStrand->rmtChannel].conf0.carrier_out_lv = 1;
-    RMT.conf_ch[pStrand->rmtChannel].conf0.mem_pd = 0;
-  
-    RMT.conf_ch[pStrand->rmtChannel].conf1.rx_en = 0;
-    RMT.conf_ch[pStrand->rmtChannel].conf1.mem_owner = 0;
-    RMT.conf_ch[pStrand->rmtChannel].conf1.tx_conti_mode = 0;  //loop back mode
-    RMT.conf_ch[pStrand->rmtChannel].conf1.ref_always_on = 1;  // use apb clock: 80M
-    RMT.conf_ch[pStrand->rmtChannel].conf1.idle_out_en = 1;
-    RMT.conf_ch[pStrand->rmtChannel].conf1.idle_out_lv = 0;
-  
-    RMT.tx_lim_ch[pStrand->rmtChannel].limit = MAX_PULSES;
+    rmt_channel_t chan = static_cast<rmt_channel_t>(pStrand->rmtChannel);
+
+    rmt_config_t rmt_tx;
+    // We'll be sending, TX mode
+    rmt_tx.rmt_mode = RMT_MODE_TX;
+    // The channel to use
+    rmt_tx.channel = chan;
+    // The GPIO pin to use
+    rmt_tx.gpio_num = static_cast<gpio_num_t>(pStrand->gpioNum);
+    // RMT channel counter divider, based on the 80Mhz APB CLK.
+    rmt_tx.clk_div = DIVIDER;
+    // Memory blocks to use, keep at 1 or we steal from the next channel.
+    // Size is 64 * 32 bits per block.
+    rmt_tx.mem_block_num = 1;
+    // No carrier signal for us
+    rmt_tx.tx_config.carrier_en = false;
+    rmt_tx.tx_config.carrier_level = RMT_CARRIER_LEVEL_HIGH;
+    rmt_tx.tx_config.loop_en = false;
+    rmt_tx.tx_config.idle_output_en = true;
+    rmt_tx.tx_config.idle_level = RMT_IDLE_LEVEL_LOW;
+
+    // Apply configuration
+    ESP_ERROR_CHECK(rmt_config(&rmt_tx));
+
+    // Disable low power mode
+    ESP_ERROR_CHECK(rmt_set_mem_pd(chan, false));
   
     // RMT config for transmitting a '0' bit val to this LED strand
     pState->pulsePairMap[0].level0 = 1;
@@ -185,17 +187,17 @@ int digitalLeds_initStrands(strand_t strands [], int numStrands)
     pState->pulsePairMap[0].duration0 = ledParams.T0H / (RMT_DURATION_NS * DIVIDER);
     pState->pulsePairMap[0].duration1 = ledParams.T0L / (RMT_DURATION_NS * DIVIDER);
     
-    // RMT config for transmitting a '0' bit val to this LED strand
+    // RMT config for transmitting a '1' bit val to this LED strand
     pState->pulsePairMap[1].level0 = 1;
     pState->pulsePairMap[1].level1 = 0;
     pState->pulsePairMap[1].duration0 = ledParams.T1H / (RMT_DURATION_NS * DIVIDER);
     pState->pulsePairMap[1].duration1 = ledParams.T1L / (RMT_DURATION_NS * DIVIDER);
 
-    RMT.int_ena.val |= tx_thr_event_offsets[pStrand->rmtChannel];  // RMT.int_ena.ch<n>_tx_thr_event = 1;
-    RMT.int_ena.val |= tx_end_offsets[pStrand->rmtChannel];  // RMT.int_ena.ch<n>_tx_end = 1;
+    ESP_ERROR_CHECK(rmt_set_tx_thr_intr_en(chan, true, MAX_PULSES));
+    ESP_ERROR_CHECK(rmt_set_tx_intr_en(chan, true));
   }
   
-  esp_intr_alloc(ETS_RMT_INTR_SOURCE, 0, handleInterrupt, nullptr, &rmt_intr_handle);
+  ESP_ERROR_CHECK(rmt_isr_register(handleInterrupt, nullptr, 0, &rmt_intr_handle));
 
   for (int i = 0; i < localStrandCnt; i++) {
     strand_t * pStrand = &localStrands[i];
