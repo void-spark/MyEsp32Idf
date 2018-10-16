@@ -58,6 +58,8 @@ extern "C" {
 }
 #endif
 
+#include <algorithm>
+
 #if DEBUG_ESP32_DIGITAL_LED_LIB
 extern char * digitalLeds_debugBuffer;
 extern int digitalLeds_debugBufferSz;
@@ -92,21 +94,11 @@ static DRAM_ATTR const uint32_t tx_end_offsets [] = {
   static_cast<uint32_t>(1) << (0 + 7) * 3,
 };
 
-typedef union {
-  struct {
-    uint32_t duration0:15;
-    uint32_t level0:1;
-    uint32_t duration1:15;
-    uint32_t level1:1;
-  };
-  uint32_t val;
-} rmtPulsePair;
-
 typedef struct {
   uint8_t * buf_data;
   uint16_t buf_pos, buf_len, buf_half, buf_isDirty;
   xSemaphoreHandle sem;
-  rmtPulsePair pulsePairMap[2];
+  rmt_item32_t pulsePairMap[2];
 } digitalLeds_stateData;
 
 static strand_t * localStrands;
@@ -264,44 +256,54 @@ int IRAM_ATTR digitalLeds_updatePixels(strand_t * pStrand)
 
   pState->sem = xSemaphoreCreateBinary();
 
-  RMT.conf_ch[pStrand->rmtChannel].conf1.mem_rd_rst = 1;
-  RMT.conf_ch[pStrand->rmtChannel].conf1.tx_start = 1;
+  ESP_ERROR_CHECK(rmt_tx_start(static_cast<rmt_channel_t>(pStrand->rmtChannel), true));
 
   return 0;
 }
 
-static IRAM_ATTR void copyToRmtBlock_half(strand_t * pStrand)
-{
-  // This fills half an RMT block
-  // When wraparound is happening, we want to keep the inactive half of the RMT block filled
+/**
+ * This fills half an RMT block (32 pulses, which is 4 bytes worth, 1 bit per pulse)
+ * When wraparound is happening, we want to keep the inactive half of the RMT block filled
+ */
+static IRAM_ATTR void copyToRmtBlock_half(strand_t * pStrand) {
 
   digitalLeds_stateData * pState = static_cast<digitalLeds_stateData*>(pStrand->_stateVars);
-  ledParams_t ledParams = ledParamsAll[pStrand->ledType];
+  const ledParams_t ledParams = ledParamsAll[pStrand->ledType];
 
-  uint16_t i, j, offset, len, byteval;
-
-  offset = pState->buf_half * MAX_PULSES;
+  // Offset toggles between 0 and MAX_PULSES, which is beginning or half of the RMT memory block
+  const uint16_t offset = pState->buf_half * MAX_PULSES;
   pState->buf_half = !pState->buf_half;
 
-  len = pState->buf_len - pState->buf_pos;
-  if (len > (MAX_PULSES / 8))
-    len = (MAX_PULSES / 8);
+  // Length of the buffer content, or at most the maximum bytes that fit in half the RMT memory block (4).
+  const uint16_t len = std::min(pState->buf_len - pState->buf_pos, MAX_PULSES / 8);
 
   if (!len) {
+    // No data left/available.
     if (!pState->buf_isDirty) {
+      // RMT memory block is already cleared
       return;
     }
-    // Clear the channel's data block and return
-    for (i = 0; i < MAX_PULSES; i++) {
-      RMTMEM.chan[pStrand->rmtChannel].data32[i + offset].val = 0;
+
+    // Clear the channel's RMT memory block and return
+    for (uint16_t index = 0; index < MAX_PULSES; index++) {
+      // TODO: Should we clean the whole block? this is half. Should be enough since val = 0 stops the RMT
+      // And I guess we write to the next half when we start again.
+      RMTMEM.chan[pStrand->rmtChannel].data32[offset + index].val = 0;
     }
+
+    // RMT memory block is cleared
     pState->buf_isDirty = 0;
     return;
   }
+
+  // RMT memory block contains dirt
   pState->buf_isDirty = 1;
 
-  for (i = 0; i < len; i++) {
-    byteval = pState->buf_data[i + pState->buf_pos];
+  // Step through the bytes in the buffer.
+  uint16_t index;
+  for (index = 0; index < len; index++) {
+    // Get (a copy of) the current byte
+    const uint16_t byteval = pState->buf_data[pState->buf_pos + index];
 
     #if DEBUG_ESP32_DIGITAL_LED_LIB
       snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
@@ -310,9 +312,12 @@ static IRAM_ATTR void copyToRmtBlock_half(strand_t * pStrand)
 
     // Shift bits out, MSB first, setting RMTMEM.chan[n].data32[x] to
     // the rmtPulsePair value corresponding to the buffered bit value
-    for (j = 0; j < 8; j++, byteval <<= 1) {
-      int bitval = (byteval >> 7) & 0x01;
-      int data32_idx = i * 8 + offset + j;
+    for (uint16_t bit = 0; bit < 8; bit++) {
+      // Get the value for the current bit, with bit 0 is MSB, bit 7 is LSB.
+      const uint16_t bitval = (byteval & (1 << (7-bit))) != 0;
+      // Get the index into the RMT memory block, which is the offset to the correct half + the byte index * 8 + the bit index.
+      const uint16_t data32_idx = offset + index * 8 + bit;
+      // Set the pulse values from the lookup table/map for 0 and 1 bit
       RMTMEM.chan[pStrand->rmtChannel].data32[data32_idx].val = pState->pulsePairMap[bitval].val;
       #if DEBUG_ESP32_DIGITAL_LED_LIB
         snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
@@ -325,8 +330,8 @@ static IRAM_ATTR void copyToRmtBlock_half(strand_t * pStrand)
     #endif
 
     // Handle the reset bit by stretching duration1 for the final bit in the stream
-    if (i + pState->buf_pos == pState->buf_len - 1) {
-      RMTMEM.chan[pStrand->rmtChannel].data32[i * 8 + offset + 7].duration1 =
+    if (index + pState->buf_pos == pState->buf_len - 1) {
+      RMTMEM.chan[pStrand->rmtChannel].data32[index * 8 + offset + 7].duration1 =
         ledParams.TRS / (RMT_DURATION_NS * DIVIDER);
       #if DEBUG_ESP32_DIGITAL_LED_LIB
         snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
@@ -336,8 +341,8 @@ static IRAM_ATTR void copyToRmtBlock_half(strand_t * pStrand)
   }
 
   // Clear the remainder of the channel's data not set above
-  for (i *= 8; i < MAX_PULSES; i++) {
-    RMTMEM.chan[pStrand->rmtChannel].data32[i + offset].val = 0;
+  for (index *= 8; index < MAX_PULSES; index++) {
+    RMTMEM.chan[pStrand->rmtChannel].data32[index + offset].val = 0;
   }
   
   pState->buf_pos += len;

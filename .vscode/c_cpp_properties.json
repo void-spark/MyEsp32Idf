@@ -10,6 +10,7 @@
                 "${workspaceFolder}/components/mad/include",
                 "C:/Portable/msys32-esp32-20180110/opt/xtensa-esp32-elf/lib/gcc/xtensa-esp32-elf/5.2.0/include",
                 "C:/Portable/msys32-esp32-20180110/opt/xtensa-esp32-elf/xtensa-esp32-elf/include/c++/5.2.0",
+                "C:/Portable/msys32-esp32-20180110/opt/xtensa-esp32-elf/xtensa-esp32-elf/include/c++/5.2.0/xtensa-esp32-elf",
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/spi_flash/include",
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/esp32/include",
                 "C:/Portable/msys32-esp32-20180110/home/Jeroen/esp/esp-idf/components/freertos/include",
