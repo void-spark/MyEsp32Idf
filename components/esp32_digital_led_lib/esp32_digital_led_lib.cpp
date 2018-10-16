@@ -70,30 +70,6 @@ static DRAM_ATTR const uint16_t DIVIDER    =  4;  // 8 still seems to work, but 
 // Minimum time of a single RMT duration based on clock ns (1 second / 80mhz)
 static DRAM_ATTR const double   RMT_DURATION_NS = 12.5;
 
-// LUT for mapping bits in RMT.int_<op>.ch<n>_tx_thr_event
-static DRAM_ATTR const uint32_t tx_thr_event_offsets [] = {
-  static_cast<uint32_t>(1) << (24 + 0),
-  static_cast<uint32_t>(1) << (24 + 1),
-  static_cast<uint32_t>(1) << (24 + 2),
-  static_cast<uint32_t>(1) << (24 + 3),
-  static_cast<uint32_t>(1) << (24 + 4),
-  static_cast<uint32_t>(1) << (24 + 5),
-  static_cast<uint32_t>(1) << (24 + 6),
-  static_cast<uint32_t>(1) << (24 + 7),
-};
-
-// LUT for mapping bits in RMT.int_<op>.ch<n>_tx_end
-static DRAM_ATTR const uint32_t tx_end_offsets [] = {
-  static_cast<uint32_t>(1) << (0 + 0) * 3,
-  static_cast<uint32_t>(1) << (0 + 1) * 3,
-  static_cast<uint32_t>(1) << (0 + 2) * 3,
-  static_cast<uint32_t>(1) << (0 + 3) * 3,
-  static_cast<uint32_t>(1) << (0 + 4) * 3,
-  static_cast<uint32_t>(1) << (0 + 5) * 3,
-  static_cast<uint32_t>(1) << (0 + 6) * 3,
-  static_cast<uint32_t>(1) << (0 + 7) * 3,
-};
-
 typedef struct {
   uint8_t * buf_data;
   uint16_t buf_pos, buf_len, buf_half, buf_isDirty;
@@ -185,7 +161,9 @@ int digitalLeds_initStrands(strand_t strands [], int numStrands)
     pState->pulsePairMap[1].duration0 = ledParams.T1H / (RMT_DURATION_NS * DIVIDER);
     pState->pulsePairMap[1].duration1 = ledParams.T1L / (RMT_DURATION_NS * DIVIDER);
 
+    // Enable interrupts for having sent MAX_PULSES pulses
     ESP_ERROR_CHECK(rmt_set_tx_thr_intr_en(chan, true, MAX_PULSES));
+    // Enable interrupts for finishing sending
     ESP_ERROR_CHECK(rmt_set_tx_intr_en(chan, true));
   }
   
@@ -199,14 +177,12 @@ int digitalLeds_initStrands(strand_t strands [], int numStrands)
   return 0;
 }
 
-void digitalLeds_resetPixels(strand_t * pStrand)
-{
+void digitalLeds_resetPixels(strand_t * pStrand) {
   memset(pStrand->pixels, 0, pStrand->numPixels * sizeof(pixelColor_t));
   digitalLeds_updatePixels(pStrand);
 }
 
-int IRAM_ATTR digitalLeds_updatePixels(strand_t * pStrand)
-{
+int IRAM_ATTR digitalLeds_updatePixels(strand_t * pStrand) {
   digitalLeds_stateData * pState = static_cast<digitalLeds_stateData*>(pStrand->_stateVars);
 
   if (pState->sem) {
@@ -300,8 +276,7 @@ static IRAM_ATTR void copyToRmtBlock_half(strand_t * pStrand) {
   pState->buf_isDirty = 1;
 
   // Step through the bytes in the buffer.
-  uint16_t index;
-  for (index = 0; index < len; index++) {
+  for (uint16_t index = 0; index < len; index++) {
     // Get (a copy of) the current byte
     const uint16_t byteval = pState->buf_data[pState->buf_pos + index];
 
@@ -330,8 +305,8 @@ static IRAM_ATTR void copyToRmtBlock_half(strand_t * pStrand) {
     #endif
 
     // Handle the reset bit by stretching duration1 for the final bit in the stream
-    if (index + pState->buf_pos == pState->buf_len - 1) {
-      RMTMEM.chan[pStrand->rmtChannel].data32[index * 8 + offset + 7].duration1 =
+    if (pState->buf_pos + index == pState->buf_len - 1) {
+      RMTMEM.chan[pStrand->rmtChannel].data32[offset + index * 8 + 7].duration1 =
         ledParams.TRS / (RMT_DURATION_NS * DIVIDER);
       #if DEBUG_ESP32_DIGITAL_LED_LIB
         snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
@@ -340,11 +315,12 @@ static IRAM_ATTR void copyToRmtBlock_half(strand_t * pStrand) {
     }
   }
 
-  // Clear the remainder of the channel's data not set above
-  for (index *= 8; index < MAX_PULSES; index++) {
-    RMTMEM.chan[pStrand->rmtChannel].data32[index + offset].val = 0;
+  // Clear the remainder of the RMT memory block (half) not set above
+  // Setting val = 0 (duration0/1 = 0 especially) should stop the RMT tx at this pulse
+  for (uint16_t data32_idx = len * 8; data32_idx < MAX_PULSES; data32_idx++) {
+    RMTMEM.chan[pStrand->rmtChannel].data32[offset + data32_idx].val = 0;
   }
-  
+
   pState->buf_pos += len;
 
   #if DEBUG_ESP32_DIGITAL_LED_LIB
@@ -355,35 +331,40 @@ static IRAM_ATTR void copyToRmtBlock_half(strand_t * pStrand) {
   return;
 }
 
-static IRAM_ATTR void handleInterrupt(void *arg)
-{
-  portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
+static IRAM_ATTR void handleInterrupt(void *arg) {
+
+  uint32_t intr_st = RMT.int_st.val;
 
   #if DEBUG_ESP32_DIGITAL_LED_LIB
     snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
              "%sRMT.int_st.val = %08x\n", digitalLeds_debugBuffer, RMT.int_st.val);
   #endif
 
-  for (int i = 0; i < localStrandCnt; i++) {
-    strand_t * pStrand = &localStrands[i];
+  // Check each strand
+  for (uint16_t index = 0; index < localStrandCnt; index++) {
+    // Get the strand state data
+    strand_t * pStrand = &localStrands[index];
     digitalLeds_stateData * pState = static_cast<digitalLeds_stateData*>(pStrand->_stateVars);
 
-    if (RMT.int_st.val & tx_thr_event_offsets[pStrand->rmtChannel])
-    {  // tests RMT.int_st.ch<n>_tx_thr_event
+    if (intr_st & BIT(24 + pStrand->rmtChannel)) {  
+      RMT.int_clr.val = BIT(24 + pStrand->rmtChannel); // Clear interrupt bit
+
+      // Threshold interrupt for the channel is triggered, we sent half a memory block of pulses
+      // Fill the used half, hopefully before the other half is sent.
       copyToRmtBlock_half(pStrand);
-      RMT.int_clr.val |= tx_thr_event_offsets[pStrand->rmtChannel];  // set RMT.int_clr.ch<n>_tx_thr_event
-    }
-    else if (RMT.int_st.val & tx_end_offsets[pStrand->rmtChannel] && pState->sem)
-    {  // tests RMT.int_st.ch<n>_tx_end and semaphore
-      xSemaphoreGiveFromISR(pState->sem, &xHigherPriorityTaskWoken);
-      RMT.int_clr.val |= tx_end_offsets[pStrand->rmtChannel];  // set RMT.int_clr.ch<n>_tx_end 
-      if (xHigherPriorityTaskWoken == pdTRUE)
-      {
-          portYIELD_FROM_ISR();
+    } else if (intr_st & BIT((0 + pStrand->rmtChannel) * 3)) {  
+      RMT.int_clr.val = BIT((0 + pStrand->rmtChannel) * 3); // Clear interrupt bit
+
+      // We're done sending, notify the next (current or future) call to digitalLeds_updatePixels
+      if(pState->sem) {
+        portBASE_TYPE xHigherPriorityTaskWoken = pdFALSE;
+        xSemaphoreGiveFromISR(pState->sem, &xHigherPriorityTaskWoken);
+        if (xHigherPriorityTaskWoken == pdTRUE) {
+            portYIELD_FROM_ISR();
+        }
       }
     }
   }
 
   return;
 }
-
