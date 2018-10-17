@@ -47,9 +47,6 @@ extern "C" {
   #include <driver/rmt.h>
   #include <freertos/FreeRTOS.h>
   #include <freertos/semphr.h>
-  #include <soc/dport_reg.h>
-  #include <soc/gpio_sig_map.h>
-  #include <soc/rmt_struct.h>
   #include <stdio.h>
   #include <string.h>  // memset, memcpy, etc. live here!
 #endif
@@ -59,11 +56,6 @@ extern "C" {
 #endif
 
 #include <algorithm>
-
-#if DEBUG_ESP32_DIGITAL_LED_LIB
-extern char * digitalLeds_debugBuffer;
-extern int digitalLeds_debugBufferSz;
-#endif
 
 static DRAM_ATTR const uint16_t MAX_PULSES = 32;  // A channel has a 64 "pulse" buffer - we use half per pass
 static DRAM_ATTR const uint16_t DIVIDER    =  4;  // 8 still seems to work, but timings become marginal
@@ -86,22 +78,15 @@ static intr_handle_t rmt_intr_handle = nullptr;
 static void copyToRmtBlock_half(strand_t * pStrand);
 static void handleInterrupt(void *arg);
 
-
-int digitalLeds_initStrands(strand_t strands [], int numStrands)
-{
-  #if DEBUG_ESP32_DIGITAL_LED_LIB
-    snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
-             "%sdigitalLeds_init numStrands = %d\n", digitalLeds_debugBuffer, numStrands);
-  #endif
-
+int digitalLeds_initStrands(strand_t strands [], int numStrands) {
   localStrands = strands;
   localStrandCnt = numStrands;
   if (localStrandCnt < 1 || localStrandCnt > 8) {
     return -1;
   }
 
-  for (int i = 0; i < localStrandCnt; i++) {
-    strand_t * pStrand = &localStrands[i];
+  for (int index = 0; index < localStrandCnt; index++) {
+    strand_t * pStrand = &localStrands[index];
     ledParams_t ledParams = ledParamsAll[pStrand->ledType];
 
     pStrand->pixels = static_cast<pixelColor_t*>(malloc(pStrand->numPixels * sizeof(pixelColor_t)));
@@ -202,8 +187,7 @@ int IRAM_ATTR digitalLeds_updatePixels(strand_t * pStrand) {
       pState->buf_data[1 + i * 3] = pStrand->pixels[i].r;
       pState->buf_data[2 + i * 3] = pStrand->pixels[i].b;
     }
-  }
-  else if (ledParams.bytesPerPixel == 4) {
+  } else if (ledParams.bytesPerPixel == 4) {
     for (uint16_t i = 0; i < pStrand->numPixels; i++) {
       // Color order is translated from RGBW to GRBW
       pState->buf_data[0 + i * 4] = pStrand->pixels[i].g;
@@ -211,8 +195,7 @@ int IRAM_ATTR digitalLeds_updatePixels(strand_t * pStrand) {
       pState->buf_data[2 + i * 4] = pStrand->pixels[i].b;
       pState->buf_data[3 + i * 4] = pStrand->pixels[i].w;
     }    
-  }
-  else {
+  } else {
     return -1;
   }
 
@@ -223,10 +206,6 @@ int IRAM_ATTR digitalLeds_updatePixels(strand_t * pStrand) {
 
   if (pState->buf_pos < pState->buf_len) {
     // Fill the other half of the buffer block
-    #if DEBUG_ESP32_DIGITAL_LED_LIB
-      snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
-               "%s# ", digitalLeds_debugBuffer);
-    #endif
     copyToRmtBlock_half(pStrand);
   }
 
@@ -280,11 +259,6 @@ static IRAM_ATTR void copyToRmtBlock_half(strand_t * pStrand) {
     // Get (a copy of) the current byte
     const uint16_t byteval = pState->buf_data[pState->buf_pos + index];
 
-    #if DEBUG_ESP32_DIGITAL_LED_LIB
-      snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
-               "%s%d(", digitalLeds_debugBuffer, byteval);
-    #endif
-
     // Shift bits out, MSB first, setting RMTMEM.chan[n].data32[x] to
     // the rmtPulsePair value corresponding to the buffered bit value
     for (uint16_t bit = 0; bit < 8; bit++) {
@@ -294,24 +268,12 @@ static IRAM_ATTR void copyToRmtBlock_half(strand_t * pStrand) {
       const uint16_t data32_idx = offset + index * 8 + bit;
       // Set the pulse values from the lookup table/map for 0 and 1 bit
       RMTMEM.chan[pStrand->rmtChannel].data32[data32_idx].val = pState->pulsePairMap[bitval].val;
-      #if DEBUG_ESP32_DIGITAL_LED_LIB
-        snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
-                 "%s%d", digitalLeds_debugBuffer, bitval);
-      #endif
     }
-    #if DEBUG_ESP32_DIGITAL_LED_LIB
-      snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
-               "%s) ", digitalLeds_debugBuffer);
-    #endif
 
     // Handle the reset bit by stretching duration1 for the final bit in the stream
     if (pState->buf_pos + index == pState->buf_len - 1) {
       RMTMEM.chan[pStrand->rmtChannel].data32[offset + index * 8 + 7].duration1 =
         ledParams.TRS / (RMT_DURATION_NS * DIVIDER);
-      #if DEBUG_ESP32_DIGITAL_LED_LIB
-        snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
-                 "%sRESET ", digitalLeds_debugBuffer);
-      #endif
     }
   }
 
@@ -323,22 +285,12 @@ static IRAM_ATTR void copyToRmtBlock_half(strand_t * pStrand) {
 
   pState->buf_pos += len;
 
-  #if DEBUG_ESP32_DIGITAL_LED_LIB
-    snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
-             "%s ", digitalLeds_debugBuffer);
-  #endif
-
   return;
 }
 
 static IRAM_ATTR void handleInterrupt(void *arg) {
 
   uint32_t intr_st = RMT.int_st.val;
-
-  #if DEBUG_ESP32_DIGITAL_LED_LIB
-    snprintf(digitalLeds_debugBuffer, digitalLeds_debugBufferSz,
-             "%sRMT.int_st.val = %08x\n", digitalLeds_debugBuffer, RMT.int_st.val);
-  #endif
 
   // Check each strand
   for (uint16_t index = 0; index < localStrandCnt; index++) {
