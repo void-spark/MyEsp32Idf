@@ -1,5 +1,5 @@
 # My configuration options
-CONFIG_ESPTOOLPY_PORT="COM4"
+CONFIG_ESPTOOLPY_PORT="rfc2217://host.docker.internal:2217"
 CONFIG_ESPTOOLPY_BAUD_921600B=y
 
 # My chips are 4MB flash, once you use OTA this settings matters
@@ -16,3 +16,7 @@ CONFIG_TCPIP_TASK_STACK_SIZE=2048
 # Disable fancy MQTT things we don't want
 CONFIG_MQTT_TRANSPORT_SSL=
 CONFIG_MQTT_TRANSPORT_WEBSOCKET=
+
+# Pin MQTT task to the system core, just in case
+CONFIG_MQTT_TASK_CORE_SELECTION_ENABLED=y
+CONFIG_MQTT_USE_CORE_0=y
