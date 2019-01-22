@@ -17,12 +17,11 @@
 #include "LedBlink2.h"
 #include "RcReceiver.h"
 #include "doorbell_recv.h"
-#include "player.h"
+#include "sd_doorbell.h"
 
 #define LED_BUILTIN GPIO_NUM_2
 #define LED1_EXT GPIO_NUM_27
 #define LED2_EXT GPIO_NUM_32
-#define LED3_EXT GPIO_NUM_25
 
 #define WS2812_1 GPIO_NUM_26
 #define NUM_PIXELS 8
@@ -51,7 +50,7 @@ static const char *TAG = "MyEsp32";
 
 long ledPatternPendingWiFi[] = {100,100};
 long ledPatternPendingMqtt[] = {100,300};
-long ledPatternConnected[] = {100,900};
+long ledPatternConnected[] = {5,2995};
 
 long ledPatternRc[] = {150,150};
 
@@ -182,6 +181,24 @@ extern "C" {
 
 static void taskRc(void *pvParameters) {
     printf("rc start: %d bytes\n", uxTaskGetStackHighWaterMark(NULL));
+
+    if (digitalLeds_initStrands(strands, 1)) {
+        printf("Failed to initialize ws2812\n");
+        while (true) {};
+    }
+    digitalLeds_resetPixels(strand);
+
+    for (int i = 0; i < strand->numPixels; i++) {
+        if(i % 3 == 0) {
+            strand->pixels[i] = pixelFromRGB(1, 0, 0);
+        } else if(i % 3 == 1) {
+            strand->pixels[i] = pixelFromRGB(0, 1, 0);
+        } else {
+            strand->pixels[i] = pixelFromRGB(0, 0, 1);
+        }
+    }
+    digitalLeds_updatePixels(strand);
+
     while (true) {
         printAc();
         printf("rc: %d bytes\n", uxTaskGetStackHighWaterMark(NULL));
@@ -202,7 +219,7 @@ extern "C" void app_main() {
     gpio_set_direction(WS2812_1, GPIO_MODE_OUTPUT);
     gpio_set_level(WS2812_1, 0);
 
-    playerSetup();
+    sdDoorbellSetup();
 
     /* Print chip information */
     esp_chip_info_t chip_info;
@@ -216,19 +233,6 @@ extern "C" void app_main() {
 
     printf("%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
         (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
-
-
-    if (digitalLeds_initStrands(strands, 1)) {
-        printf("Failed to initialize ws2812\n");
-        while (true) {};
-    }
-    digitalLeds_resetPixels(strand);
-
-
-    for (int i = 0; i < strand->numPixels; i++) {
-        strand->pixels[i] = pixelFromRGB(5, 0, 0);
-    }
-    digitalLeds_updatePixels(strand);
 
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
@@ -269,10 +273,10 @@ extern "C" void app_main() {
     gpio_install_isr_service(0);
     gpio_isr_handler_add(RCV1_EXT, myHandleInterrupt, NULL);
 
-    playerStart();
+    sdDoorbellStart();
 
-    TimerHandle_t timer = xTimerCreate("infoTimer", pdMS_TO_TICKS(2000), pdTRUE, NULL, infoCallBack );
-    xTimerStart(timer, 0);
+    // TimerHandle_t timer = xTimerCreate("infoTimer", pdMS_TO_TICKS(2000), pdTRUE, NULL, infoCallBack );
+    // xTimerStart(timer, 0);
     
     if (xTaskCreatePinnedToCore(taskRc, "taskRc", configMINIMAL_STACK_SIZE + 2000, NULL, configMAX_PRIORITIES - 5, NULL, 1)!=pdPASS) {
         printf("ERROR creating taskRc! Out of memory?\n");
@@ -429,6 +433,6 @@ void printDoorbell() {
 
     int msg_id = esp_mqtt_client_publish(mqttClient, topic, msg, 0, 0, 0);
 
-    go();
+    sdDoorbellGo();
   }
 }
