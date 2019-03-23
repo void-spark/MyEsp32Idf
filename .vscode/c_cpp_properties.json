@@ -37,7 +37,8 @@
                 "${workspaceFolder}/sdk/esp-idf/components/esp_event/include",
                 "${workspaceFolder}/sdk/esp-idf/components/app_update/include",
                 "${workspaceFolder}/sdk/esp-idf/components/esp_http_client/include",
-                "${workspaceFolder}/sdk/esp-idf/components/nghttp/port/include"
+                "${workspaceFolder}/sdk/esp-idf/components/nghttp/port/include",
+                "${workspaceFolder}/components/u8g2/csrc"
             ],
             "browse": {
                 "path": [
