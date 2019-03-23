@@ -13,11 +13,13 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "esp32_digital_led_lib.h"
+#include "lwip/apps/sntp.h"
 #include "mqtt_client.h"
 #include "LedBlink2.h"
 #include "RcReceiver.h"
 #include "doorbell_recv.h"
 #include "sd_doorbell.h"
+#include "test_SSD1306.h"
 
 #define LED_BUILTIN GPIO_NUM_2
 #define LED1_EXT GPIO_NUM_27
@@ -26,7 +28,7 @@
 #define WS2812_1 GPIO_NUM_26
 #define NUM_PIXELS 8
 
-#define RCV1_EXT GPIO_NUM_15
+#define RCV1_EXT GPIO_NUM_33
 
 #define RC_BITS 25
 #define TRIS (RC_BITS - 1) / 2
@@ -107,6 +109,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
     esp_mqtt_client_handle_t client = event->client;
     switch (event->event_id) {
+        case MQTT_EVENT_BEFORE_CONNECT:
+            ESP_LOGI(TAG, "MQTT_EVENT_BEFORE_CONNECT");
+            break;
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
             xEventGroupSetBits(app_event_group, MQTT_CONNECTED_BIT);
@@ -253,6 +258,11 @@ extern "C" void app_main() {
 
     blinkerInt.setPattern(ledPatternPendingMqtt);
 
+    ESP_LOGI(TAG, "Initializing SNTP");
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_init();
+
     mqtt_app_start();
 
     ESP_LOGI(TAG, "Waiting for MQTT");
@@ -284,6 +294,10 @@ extern "C" void app_main() {
 
     if (xTaskCreatePinnedToCore(taskDrb, "taskDrb", configMINIMAL_STACK_SIZE + 2000, NULL, configMAX_PRIORITIES - 5, NULL, 1)!=pdPASS) {
         printf("ERROR creating taskDrb! Out of memory?\n");
+    };
+
+    if (xTaskCreatePinnedToCore(task_test_SSD1306, "task_test_SSD1306", configMINIMAL_STACK_SIZE + 2000, NULL, configMAX_PRIORITIES - 5, NULL, 1)!=pdPASS) {
+        printf("ERROR creating task_test_SSD1306! Out of memory?\n");
     };
 
     vTaskDelete(NULL);

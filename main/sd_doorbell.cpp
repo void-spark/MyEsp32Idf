@@ -69,11 +69,14 @@ void sdDoorbellGo() {
 
 static bool mountCard() {
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    host.slot = VSPI_HOST;
+
     sdspi_slot_config_t slot_config = SDSPI_SLOT_CONFIG_DEFAULT();
     slot_config.gpio_miso = PIN_NUM_MISO;
     slot_config.gpio_mosi = PIN_NUM_MOSI;
     slot_config.gpio_sck  = PIN_NUM_CLK;
     slot_config.gpio_cs = PIN_NUM_CS;
+    slot_config.dma_channel = 2;
 
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = false,
