@@ -3,6 +3,7 @@
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/semphr.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -28,7 +29,14 @@
 
 static char tag[] = "test_SSD1306";
 
+static char header[16] = "Hello dragon!";
+
+static SemaphoreHandle_t headerSemaphore = NULL;
+
 void task_test_SSD1306(void *ignore) {
+
+	headerSemaphore = xSemaphoreCreateMutex();
+
 	u8g2_esp32_hal_t u8g2_esp32_hal = U8G2_ESP32_HAL_DEFAULT;
 	u8g2_esp32_hal.clk   = PIN_CLK;
 	u8g2_esp32_hal.mosi  = PIN_MOSI;
@@ -63,7 +71,10 @@ void task_test_SSD1306(void *ignore) {
 		// 128 wide, 64 high. 16 pixels yellow, 48 blue
 
 		u8g2_SetFont(&u8g2, u8g2_font_9x15B_tr);
-		u8g2_DrawStr(&u8g2, 0, u8g2_GetAscent(&u8g2), "Hello dragon!");
+
+		xSemaphoreTake(headerSemaphore, portMAX_DELAY);
+		u8g2_DrawStr(&u8g2, 0, u8g2_GetAscent(&u8g2), header);
+		xSemaphoreGive(headerSemaphore);
 
 		u8g2_DrawBox(&u8g2, pos, 20, 15, 5);
 
@@ -97,4 +108,11 @@ void task_test_SSD1306(void *ignore) {
 	ESP_LOGD(tag, "All done!");
 
 	vTaskDelete(NULL);
+}
+
+
+void updateHeader(int newValueLength, char* newValue) {
+	xSemaphoreTake(headerSemaphore, portMAX_DELAY);
+	snprintf(header, 16, "%.*s", newValueLength, newValue);
+	xSemaphoreGive(headerSemaphore);
 }

@@ -114,6 +114,9 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
             break;
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+
+            esp_mqtt_client_subscribe(client, "doorbell/header", 2);
+
             xEventGroupSetBits(app_event_group, MQTT_CONNECTED_BIT);
             break;
         case MQTT_EVENT_DISCONNECTED:
@@ -133,6 +136,11 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
             ESP_LOGI(TAG, "MQTT_EVENT_DATA");
             printf("TOPIC=%.*s\n", event->topic_len, event->topic);
             printf("DATA=%.*s\n", event->data_len, event->data);
+
+            if(strncmp("doorbell/header", event->topic, event->topic_len) == 0) {
+                updateHeader(event->data_len, event->data);
+            }
+
             break;
         case MQTT_EVENT_ERROR:
             ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
