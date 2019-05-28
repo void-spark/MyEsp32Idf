@@ -32,8 +32,7 @@ uint8_t u8g2_esp32_spi_byte_cb(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void 
 				break;
 			}
 
-		  spi_bus_config_t bus_config;
-                  memset(&bus_config, 0, sizeof(spi_bus_config_t));
+		  spi_bus_config_t bus_config = {};
 		  bus_config.sclk_io_num   = u8g2_esp32_hal.clk; // CLK
 		  bus_config.mosi_io_num   = u8g2_esp32_hal.mosi; // MOSI
 		  bus_config.miso_io_num   = -1; // MISO
@@ -41,7 +40,7 @@ uint8_t u8g2_esp32_spi_byte_cb(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void 
 		  bus_config.quadhd_io_num = -1; // Not used
 		  ESP_ERROR_CHECK(spi_bus_initialize(HSPI_HOST, &bus_config, 1));
 
-		  spi_device_interface_config_t dev_config;
+		  spi_device_interface_config_t dev_config = {};
 		  dev_config.address_bits     = 0;
 		  dev_config.command_bits     = 0;
 		  dev_config.dummy_bits       = 0;
@@ -65,7 +64,7 @@ uint8_t u8g2_esp32_spi_byte_cb(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void 
 			break;
 
 		case U8X8_MSG_BYTE_SEND: {
-			spi_transaction_t trans_desc;
+			spi_transaction_t trans_desc = {};
 			trans_desc.addr      = 0;
 			trans_desc.cmd   	 = 0;
 			trans_desc.flags     = 0;
@@ -104,7 +103,7 @@ uint8_t u8g2_esp32_gpio_and_delay_cb(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int,
             if (bitmask==0) {
             	break;
             }
-			gpio_config_t gpioConfig;
+			gpio_config_t gpioConfig = {};
 			gpioConfig.pin_bit_mask = bitmask;
 			gpioConfig.mode         = GPIO_MODE_OUTPUT;
 			gpioConfig.pull_up_en   = GPIO_PULLUP_DISABLE;
