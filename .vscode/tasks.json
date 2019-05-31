@@ -6,7 +6,7 @@
         {
             "label": "Make all",
             "type": "shell",
-            "command": ".\\make_all.cmd",
+            "command": ".\\buildscripts\\make_all.cmd",
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -21,7 +21,7 @@
         {
             "label": "Make clean",
             "type": "shell",
-            "command": ".\\make_clean.cmd",
+            "command": ".\\buildscripts\\make_clean.cmd",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -33,7 +33,7 @@
         {
             "label": "Make flash",
             "type": "shell",
-            "command": ".\\make_flash.cmd",
+            "command": ".\\buildscripts\\make_flash.cmd",
             "group": "build",
             "presentation": {
                 "reveal": "always",
@@ -45,7 +45,7 @@
         {
             "label": "Make monitor",
             "type": "shell",
-            "command": ".\\make_monitor.cmd",
+            "command": ".\\buildscripts\\make_monitor.cmd",
             "presentation": {
                 "reveal": "always",
                 "panel": "shared",
@@ -56,7 +56,7 @@
         {
             "label": "Host port",
             "type": "shell",
-            "command": ".\\host_port.cmd",
+            "command": ".\\buildscripts\\host_port.cmd",
             "presentation": {
                 "reveal": "always",
                 "panel": "new",
