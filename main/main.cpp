@@ -21,6 +21,7 @@
 #include "sd_doorbell.h"
 #include "test_SSD1306.h"
 
+#define BTN_BOOT GPIO_NUM_0
 #define LED_BUILTIN GPIO_NUM_2
 #define LED1_EXT GPIO_NUM_27
 #define LED2_EXT GPIO_NUM_32
@@ -67,7 +68,7 @@ RcReceiver rcReceiver(RC_BITS, 12);
 
 esp_mqtt_client_handle_t mqttClient;
 
-strand_t strands[] = { {.rmtChannel = 0, .gpioNum = WS2812_1, .ledType = LED_WS2812B_V3, .brightLimit = 32, .numPixels =  NUM_PIXELS,
+strand_t strands[] = { {.rmtChannel = 0, .gpioNum = WS2812_1, .ledType = LED_WS2812B_V3, .numPixels =  NUM_PIXELS,
    .pixels = nullptr, ._stateVars = nullptr} };
 
 strand_t * strand = &strands[0];
@@ -226,6 +227,19 @@ static void taskDrb(void *pvParameters) {
     }
 }
 
+
+static TimerHandle_t buttonTimer;
+
+static void buttonTimerCallback(TimerHandle_t xTimer) { 
+    int level = gpio_get_level(BTN_BOOT);
+
+    static uint16_t state = 0; // Current debounce status
+    state=(state<<1) | !level | 0xe000;
+    if(state==0xf000) {
+        updateHeader("Squee!");
+    }
+}
+ 
 extern "C" void app_main() {
 
     gpio_pad_select_gpio(WS2812_1);
@@ -255,6 +269,7 @@ extern "C" void app_main() {
     }
     ESP_ERROR_CHECK(ret);
 
+    myInitDisplay();
 
     // Initialize WiFi
     wifi_init_sta();
@@ -262,6 +277,7 @@ extern "C" void app_main() {
     blinkerInt.setPattern(ledPatternPendingWiFi);
     
     ESP_LOGI(TAG, "Waiting for wifi");
+    updateHeader("Wait: WiFi");
     xEventGroupWaitBits(app_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
 
     blinkerInt.setPattern(ledPatternPendingMqtt);
@@ -274,6 +290,7 @@ extern "C" void app_main() {
     mqtt_app_start();
 
     ESP_LOGI(TAG, "Waiting for MQTT");
+    updateHeader("Wait: MQTT");
     xEventGroupWaitBits(app_event_group, MQTT_CONNECTED_BIT, false, true, portMAX_DELAY);
 
     blinkerInt.setPattern(ledPatternConnected);
@@ -304,9 +321,13 @@ extern "C" void app_main() {
         printf("ERROR creating taskDrb! Out of memory?\n");
     };
 
-    if (xTaskCreatePinnedToCore(task_test_SSD1306, "task_test_SSD1306", configMINIMAL_STACK_SIZE + 2000, NULL, configMAX_PRIORITIES - 5, NULL, 1)!=pdPASS) {
-        printf("ERROR creating task_test_SSD1306! Out of memory?\n");
-    };
+
+
+    gpio_pad_select_gpio(BTN_BOOT);
+    gpio_set_direction(BTN_BOOT, GPIO_MODE_INPUT);
+    buttonTimer = xTimerCreate("ButtonTimer", (5 / portTICK_PERIOD_MS), pdTRUE, (void *) 0, buttonTimerCallback);
+
+    xTimerStart(buttonTimer, 0);
 
     vTaskDelete(NULL);
 }

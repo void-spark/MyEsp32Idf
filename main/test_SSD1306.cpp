@@ -33,36 +33,10 @@ static char header[16] = "Hello dragon!";
 
 static SemaphoreHandle_t headerSemaphore = NULL;
 
-void task_test_SSD1306(void *ignore) {
+static u8g2_t u8g2; // a structure which will contain all the data for one display
 
-	headerSemaphore = xSemaphoreCreateMutex();
-
-	u8g2_esp32_hal_t u8g2_esp32_hal = U8G2_ESP32_HAL_DEFAULT;
-	u8g2_esp32_hal.clk   = PIN_CLK;
-	u8g2_esp32_hal.mosi  = PIN_MOSI;
-	u8g2_esp32_hal.cs    = PIN_CS;
-	u8g2_esp32_hal.dc    = PIN_DC;
-	u8g2_esp32_hal.reset = PIN_RESET;
-	u8g2_esp32_hal_init(u8g2_esp32_hal);
-
-
-	u8g2_t u8g2; // a structure which will contain all the data for one display
-	u8g2_Setup_ssd1306_128x64_noname_f(
-		&u8g2,
-		U8G2_R0,
-		u8g2_esp32_spi_byte_cb,
-		u8g2_esp32_gpio_and_delay_cb);  // init u8g2 structure
-
-	u8g2_InitDisplay(&u8g2); // send init sequence to the display, display is in sleep mode after this,
-
-	u8g2_SetPowerSave(&u8g2, 0); // wake up display
-
-	u8g2_SetContrast(&u8g2, 255);
-
+static void task_test_SSD1306(void *ignore) {
 	const TickType_t xDelay = 5 / portTICK_PERIOD_MS;
-
-	setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
-	tzset();
 
 	int pos = 0;
 	while(true) {
@@ -110,9 +84,43 @@ void task_test_SSD1306(void *ignore) {
 	vTaskDelete(NULL);
 }
 
+void myInitDisplay() {
+	headerSemaphore = xSemaphoreCreateMutex();
+
+	u8g2_esp32_hal_t u8g2_esp32_hal = U8G2_ESP32_HAL_DEFAULT;
+	u8g2_esp32_hal.clk   = PIN_CLK;
+	u8g2_esp32_hal.mosi  = PIN_MOSI;
+	u8g2_esp32_hal.cs    = PIN_CS;
+	u8g2_esp32_hal.dc    = PIN_DC;
+	u8g2_esp32_hal.reset = PIN_RESET;
+	u8g2_esp32_hal_init(u8g2_esp32_hal);
+
+	u8g2_Setup_ssd1306_128x64_noname_f(
+		&u8g2,
+		U8G2_R0,
+		u8g2_esp32_spi_byte_cb,
+		u8g2_esp32_gpio_and_delay_cb);  // init u8g2 structure
+
+	u8g2_InitDisplay(&u8g2); // send init sequence to the display, display is in sleep mode after this,
+
+	u8g2_SetPowerSave(&u8g2, 0); // wake up display
+
+	u8g2_SetContrast(&u8g2, 255);
+
+	setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+	tzset();
+
+    if (xTaskCreatePinnedToCore(task_test_SSD1306, "task_test_SSD1306", configMINIMAL_STACK_SIZE + 2000, NULL, configMAX_PRIORITIES - 5, NULL, 1) != pdPASS) {
+        printf("ERROR creating task_test_SSD1306! Out of memory?\n");
+    };
+}
 
 void updateHeader(int newValueLength, char* newValue) {
 	xSemaphoreTake(headerSemaphore, portMAX_DELAY);
 	snprintf(header, 16, "%.*s", newValueLength, newValue);
 	xSemaphoreGive(headerSemaphore);
+}
+
+void updateHeader(char* newValue) {
+	updateHeader(strlen(newValue), newValue);
 }

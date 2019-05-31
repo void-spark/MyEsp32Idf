@@ -67,7 +67,6 @@ typedef struct {
   int rmtChannel;
   int gpioNum;
   int ledType;
-  int brightLimit;
   int numPixels;
   pixelColor_t * pixels;
   void * _stateVars;
