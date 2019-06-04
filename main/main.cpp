@@ -19,7 +19,7 @@
 #include "RcReceiver.h"
 #include "doorbell_recv.h"
 #include "sd_doorbell.h"
-#include "test_SSD1306.h"
+#include "my_display.h"
 
 #define BTN_BOOT GPIO_NUM_0
 #define LED_BUILTIN GPIO_NUM_2
@@ -94,6 +94,7 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
     case SYSTEM_EVENT_STA_GOT_IP:
         ESP_LOGI(TAG, "got ip:%s",
                  ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
+        updateIp(ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
         xEventGroupSetBits(app_event_group, WIFI_CONNECTED_BIT);
         break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
@@ -227,16 +228,16 @@ static void taskDrb(void *pvParameters) {
     }
 }
 
-
 static TimerHandle_t buttonTimer;
 
 static void buttonTimerCallback(TimerHandle_t xTimer) { 
     int level = gpio_get_level(BTN_BOOT);
 
+    // https://www.embedded.com/electronics-blogs/break-points/4024981/My-favorite-software-debouncers
     static uint16_t state = 0; // Current debounce status
     state=(state<<1) | !level | 0xe000;
     if(state==0xf000) {
-        updateHeader("Squee!");
+        nextScreen();
     }
 }
  
