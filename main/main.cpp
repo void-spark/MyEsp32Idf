@@ -14,11 +14,11 @@
 #include "lwip/sys.h"
 #include "esp32_digital_led_lib.h"
 #include "lwip/apps/sntp.h"
-#include "mqtt_client.h"
 #include "LedBlink2.h"
 #include "RcReceiver.h"
 #include "doorbell_recv.h"
 #include "sd_doorbell.h"
+#include "my_mqtt.h"
 #include "my_display.h"
 
 #define BTN_BOOT GPIO_NUM_0
@@ -38,18 +38,12 @@
 #define WIFI_SSID "Milkrun"
 #define WIFI_PASS "55382636751623425906"
 
-// MQTT details
-const char* mqtt_server = "mqtt://raspberrypi.fritz.box";
-
-
 /* FreeRTOS event group to signal app status changes*/
 static EventGroupHandle_t app_event_group;
 
 const int WIFI_CONNECTED_BIT = BIT0;
-const int MQTT_CONNECTED_BIT = BIT1;
 
 static const char *TAG = "MyEsp32";
-
 
 long ledPatternPendingWiFi[] = {100,100};
 long ledPatternPendingMqtt[] = {100,300};
@@ -66,8 +60,6 @@ LedBlink2 blinkerExt2(LED2_EXT);
 
 RcReceiver rcReceiver(RC_BITS, 12);
 
-esp_mqtt_client_handle_t mqttClient;
-
 strand_t strands[] = { {.rmtChannel = 0, .gpioNum = WS2812_1, .ledType = LED_WS2812B_V3, .numPixels =  NUM_PIXELS,
    .pixels = nullptr, ._stateVars = nullptr} };
 
@@ -83,7 +75,6 @@ IRAM_ATTR void myHandleInterrupt(void *) {
   handleDoorbell(time);
   //digitalWrite(TMP_OUT, state);
 }
-
 
 static esp_err_t event_handler(void *ctx, system_event_t *event)
 {
@@ -103,50 +94,6 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
         break;
     default:
         break;
-    }
-    return ESP_OK;
-}
-
-static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
-{
-    esp_mqtt_client_handle_t client = event->client;
-    switch (event->event_id) {
-        case MQTT_EVENT_BEFORE_CONNECT:
-            ESP_LOGI(TAG, "MQTT_EVENT_BEFORE_CONNECT");
-            break;
-        case MQTT_EVENT_CONNECTED:
-            ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-
-            esp_mqtt_client_subscribe(client, "doorbell/header", 2);
-
-            xEventGroupSetBits(app_event_group, MQTT_CONNECTED_BIT);
-            break;
-        case MQTT_EVENT_DISCONNECTED:
-            ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-            xEventGroupClearBits(app_event_group, MQTT_CONNECTED_BIT);
-            break;
-        case MQTT_EVENT_SUBSCRIBED:
-            ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
-            break;
-        case MQTT_EVENT_UNSUBSCRIBED:
-            ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
-            break;
-        case MQTT_EVENT_PUBLISHED:
-            ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
-            break;
-        case MQTT_EVENT_DATA:
-            ESP_LOGI(TAG, "MQTT_EVENT_DATA");
-            printf("TOPIC=%.*s\n", event->topic_len, event->topic);
-            printf("DATA=%.*s\n", event->data_len, event->data);
-
-            if(strncmp("doorbell/header", event->topic, event->topic_len) == 0) {
-                updateHeader(event->data_len, event->data);
-            }
-
-            break;
-        case MQTT_EVENT_ERROR:
-            ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
-            break;
     }
     return ESP_OK;
 }
@@ -172,19 +119,6 @@ void wifi_init_sta() {
     ESP_LOGI(TAG, "wifi_init_sta finished.");
     ESP_LOGI(TAG, "connect to ap SSID:%s password:%s", WIFI_SSID, WIFI_PASS);
 }
-
-
-static void mqtt_app_start(void) {
-    
-    esp_mqtt_client_config_t mqtt_cfg = {};
-    mqtt_cfg.uri = mqtt_server;
-    mqtt_cfg.event_handle = mqtt_event_handler;
-
-    mqttClient = esp_mqtt_client_init(&mqtt_cfg);
-    esp_mqtt_client_start(mqttClient);
-}
-
-
 
 extern "C" {
     static void infoCallBack(TimerHandle_t xTimer) {
@@ -288,11 +222,12 @@ extern "C" void app_main() {
     sntp_setservername(0, "pool.ntp.org");
     sntp_init();
 
-    mqtt_app_start();
+    mqttStart();
 
     ESP_LOGI(TAG, "Waiting for MQTT");
     updateHeader("Wait: MQTT");
-    xEventGroupWaitBits(app_event_group, MQTT_CONNECTED_BIT, false, true, portMAX_DELAY);
+
+    mqttWait();
 
     blinkerInt.setPattern(ledPatternConnected);
 
@@ -321,8 +256,6 @@ extern "C" void app_main() {
     if (xTaskCreatePinnedToCore(taskDrb, "taskDrb", configMINIMAL_STACK_SIZE + 2000, NULL, configMAX_PRIORITIES - 5, NULL, 1)!=pdPASS) {
         printf("ERROR creating taskDrb! Out of memory?\n");
     };
-
-
 
     gpio_pad_select_gpio(BTN_BOOT);
     gpio_set_direction(BTN_BOOT, GPIO_MODE_INPUT);
@@ -403,7 +336,7 @@ void printAc() {
         
         snprintf (topic2, 50, "devices/receiver/sw%d/pulse_%s", address + 1, stateOn ? "on" : "off" );
         snprintf (msg2, 50, "%s", "true" );
-        int msg_id = esp_mqtt_client_publish(mqttClient, topic2, msg2, 0, 0, 0);
+        mqttPublish(topic2, msg2, 0, 0, 0);
     }
 
     if (sameAsLast && !sameAsTriggered) {
@@ -438,7 +371,7 @@ void printAc() {
         static char msg[50];
         snprintf (topic, 50, "devices/receiver/sw%d/on", address + 1);
         snprintf (msg, 50, "%s", stateOn ? "true" : "false"  );
-        int msg_id = esp_mqtt_client_publish(mqttClient, topic, msg, 0, 0, 0);
+        mqttPublish(topic, msg, 0, 0, 0);
     }
 }
 
@@ -475,7 +408,7 @@ void printDoorbell() {
     snprintf (topic, 50, "devices/receiver/doorbell/pushed");
     snprintf (msg, 50, "%s", "true" );
 
-    int msg_id = esp_mqtt_client_publish(mqttClient, topic, msg, 0, 0, 0);
+    mqttPublish(topic, msg, 0, 0, 0);
 
     sdDoorbellGo();
   }
