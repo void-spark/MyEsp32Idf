@@ -174,7 +174,13 @@ static void buttonTimerCallback(TimerHandle_t xTimer) {
         nextScreen();
     }
 }
- 
+
+static void handleMessage(char* topic, char* data) {
+    if(strcmp("doorbell/header", topic) == 0) {
+        updateHeader(data);
+    }
+}
+
 extern "C" void app_main() {
 
     gpio_pad_select_gpio(WS2812_1);
@@ -222,7 +228,7 @@ extern "C" void app_main() {
     sntp_setservername(0, "pool.ntp.org");
     sntp_init();
 
-    mqttStart();
+    mqttStart(handleMessage);
 
     ESP_LOGI(TAG, "Waiting for MQTT");
     updateHeader("Wait: MQTT");
@@ -262,6 +268,13 @@ extern "C" void app_main() {
     buttonTimer = xTimerCreate("ButtonTimer", (5 / portTICK_PERIOD_MS), pdTRUE, (void *) 0, buttonTimerCallback);
 
     xTimerStart(buttonTimer, 0);
+
+    publishDevProp("online", "true");
+	//publishDevProp("name", name);
+
+    tcpip_adapter_ip_info_t ipInfo; 
+    tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, &ipInfo);
+	publishDevProp("localip", ip4addr_ntoa(&ipInfo.ip));
 
     vTaskDelete(NULL);
 }
