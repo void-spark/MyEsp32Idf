@@ -1,6 +1,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "esp_log.h"
+#include "esp_wifi.h"
 #include "esp_ota_ops.h"
 #include "mqtt_client.h"
 #include "my_mqtt.h"
@@ -8,6 +9,8 @@
 static const char *TAG = "MyMqtt";
 
 static const int MQTT_CONNECTED_BIT = BIT0;
+
+static const int STATS_INTERVAL_SEC = 2;
 
 // MQTT details
 static const char* mqtt_server = "mqtt://raspberrypi.fritz.box";
@@ -17,6 +20,8 @@ static EventGroupHandle_t mqttEventGroup;
 static char deviceTopic[30] = {};
 
 static esp_mqtt_client_handle_t mqttClient;
+
+static TimerHandle_t statsTimer;
 
 static message_handler_t messageHandler;
 
@@ -46,6 +51,17 @@ static void publishStats() {
 	char heap[16];
     snprintf(heap, sizeof(heap), "%u", esp_get_free_heap_size());
     publishDevProp("stats/freeheap", heap);
+
+	char signal[16];
+    wifi_ap_record_t wifidata = {};
+    ESP_ERROR_CHECK(esp_wifi_sta_get_ap_info(&wifidata));
+    // NOTE: Not sure what the scale is here, let's call lowest 0% and highest 100%
+    snprintf(signal, sizeof(signal), "%d", ((wifidata.rssi - INT8_MIN)  * 100) / 255);
+    publishDevProp("stats/signal", signal);
+}
+
+static void publishStatsCallback(TimerHandle_t xTimer) {
+    publishStats();
 }
 
 static void handleConnected() {
@@ -55,7 +71,7 @@ static void handleConnected() {
 
     publishDevProp("name", "TODO:Desk doorbell receiver");
 
-    tcpip_adapter_ip_info_t ipInfo; 
+    tcpip_adapter_ip_info_t ipInfo = {}; 
     tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, &ipInfo);
     publishDevProp("localip", ip4addr_ntoa(&ipInfo.ip));
 
@@ -73,13 +89,19 @@ static void handleConnected() {
     
     publishDevProp("implementation", "custom");
 
-    publishDevProp("stats", "TODO:uptime,freeheap");
-    publishDevProp("stats/interval", "60");
+    publishDevProp("stats", "TODO:uptime,freeheap,signal");
+
+	char interval[10];
+    snprintf(interval, sizeof(interval), "%d", STATS_INTERVAL_SEC);
+    publishDevProp("stats/interval", interval);
 
     // Repeat on scheduler, but send current values once now
     publishStats();
 
     esp_mqtt_client_subscribe(mqttClient, "doorbell/header", 2);
+
+    statsTimer = xTimerCreate("StatsTimer", ((STATS_INTERVAL_SEC * 1000) / portTICK_PERIOD_MS), pdTRUE, (void *) 0, publishStatsCallback);
+    xTimerStart(statsTimer, 0);
 
     publishDevProp("state", "ready");
 }
@@ -167,7 +189,7 @@ void mqttStart(message_handler_t messageHandlerArg) {
     mqtt_cfg.event_handle = mqttEventHandler;
     mqtt_cfg.lwt_topic = lwt_topic;
     mqtt_cfg.lwt_msg = "lost";
-    mqtt_cfg.lwt_qos = 2;
+    mqtt_cfg.lwt_qos = 1;
     mqtt_cfg.lwt_retain = 1;
 
     mqttClient = esp_mqtt_client_init(&mqtt_cfg);
