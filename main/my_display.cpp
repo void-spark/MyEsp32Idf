@@ -130,17 +130,17 @@ void myInitDisplay() {
     };
 }
 
-void updateHeader(int newValueLength, char* newValue) {
+void updateHeader(int newValueLength, const char* newValue) {
 	xSemaphoreTake(dataSemaphore, portMAX_DELAY);
 	snprintf(header, 16, "%.*s", newValueLength, newValue);
 	xSemaphoreGive(dataSemaphore);
 }
 
-void updateHeader(char* newValue) {
+void updateHeader(const char* newValue) {
 	updateHeader(strlen(newValue), newValue);
 }
 
-void updateIp(char* newValue) {
+void updateIp(const char* newValue) {
 	xSemaphoreTake(dataSemaphore, portMAX_DELAY);
 	snprintf(ip, 16, "%s", newValue);
 	xSemaphoreGive(dataSemaphore);

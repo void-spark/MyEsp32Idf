@@ -10,6 +10,7 @@
                 "${workspaceFolder}/components/mad/include",
                 "${workspaceFolder}/components/u8g2/csrc",
                 "${workspaceFolder}/sdk/esp-idf/components/app_update/include",
+                "${workspaceFolder}/sdk/esp-idf/components/bootloader_support/include",
                 "${workspaceFolder}/sdk/esp-idf/components/driver/include",
                 "${workspaceFolder}/sdk/esp-idf/components/esp32/include",
                 "${workspaceFolder}/sdk/esp-idf/components/esp_common/include",
