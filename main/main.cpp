@@ -175,9 +175,16 @@ static void buttonTimerCallback(TimerHandle_t xTimer) {
     }
 }
 
-static void handleMessage(const char* topic, const char* data) {
-    if(strcmp("doorbell/header", topic) == 0) {
+static void subscribeTopics() {
+    // TODO: Send node/properties details, rename to setup or so?
+    subscribeDevTopic("display/header/set");
+}
+
+static void handleMessage(const char* topic1, const char* topic2, const char* topic3, const char* data) {
+
+    if(strcmp(topic1, "display") == 0 && strcmp(topic2, "header") == 0 && strcmp(topic3, "set") == 0) {
         updateHeader(data);
+        publishNodeProp("display", "header", data);
     }
 }
 
@@ -228,7 +235,7 @@ extern "C" void app_main() {
     sntp_setservername(0, "pool.ntp.org");
     sntp_init();
 
-    mqttStart(handleMessage);
+    mqttStart(subscribeTopics, handleMessage);
 
     ESP_LOGI(TAG, "Waiting for MQTT");
     updateHeader("Wait: MQTT");

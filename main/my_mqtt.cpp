@@ -23,6 +23,7 @@ static esp_mqtt_client_handle_t mqttClient;
 
 static TimerHandle_t statsTimer;
 
+static topic_subscriber_t topicSubscriber;
 static message_handler_t messageHandler;
 
 void publishDevProp(const char *deviceProperty, const char *value) {
@@ -98,7 +99,7 @@ static void handleConnected() {
     // Repeat on scheduler, but send current values once now
     publishStats();
 
-    esp_mqtt_client_subscribe(mqttClient, "doorbell/header", 2);
+    topicSubscriber();
 
     statsTimer = xTimerCreate("StatsTimer", ((STATS_INTERVAL_SEC * 1000) / portTICK_PERIOD_MS), pdTRUE, (void *) 0, publishStatsCallback);
     xTimerStart(statsTimer, 0);
@@ -106,13 +107,39 @@ static void handleConnected() {
     publishDevProp("state", "ready");
 }
 
-static void handleMessage(const char* topic, const char* data) {
-    // if(strncmp(topic, deviceTopic, strlen(deviceTopic)) != 0) {
-    //     ESP_LOGE(TAG, "MQTT Topic '%s' does not start with our root topic '%s'", topic, deviceTopic);
-    //     return;
-    // }
+// Topic will be modified by strtok_r
+static void handleMessage(char* topic, const char* data) {
+    if(strncmp(topic, deviceTopic, strlen(deviceTopic)) != 0) {
+        ESP_LOGE(TAG, "MQTT Topic '%s' does not start with our root topic '%s'", topic, deviceTopic);
+        return;
+    }
 
-    messageHandler(topic, data);
+    const char *propLevel1 = NULL;
+    const char *propLevel2 = NULL;
+    const char *propLevel3 = NULL;
+
+    char *token = NULL;
+    char *saveptr;
+    for (uint8_t pos = 0; (pos == 0 || token) && pos < 5; pos++) {
+        token = strtok_r(pos == 0 ? topic : NULL, "/", &saveptr);
+        switch (pos) {
+            case 2:
+                propLevel1 = token;
+                break;
+            case 3:
+                propLevel2 = token;
+                break;
+            case 4:
+                propLevel3 = token;
+        }
+    }
+
+    if(propLevel1 == NULL) {
+        ESP_LOGE(TAG, "MQTT Topic does not include any property");
+        return;
+    }
+
+    messageHandler(propLevel1, propLevel2, propLevel3, data);
 }
 
 static esp_err_t mqttEventHandler(esp_mqtt_event_handle_t event) {
@@ -168,7 +195,8 @@ static esp_err_t mqttEventHandler(esp_mqtt_event_handle_t event) {
     return ESP_OK;
 }
 
-void mqttStart(message_handler_t messageHandlerArg) {
+void mqttStart(topic_subscriber_t topicSubscriberArg, message_handler_t messageHandlerArg) {
+    topicSubscriber = topicSubscriberArg;
     messageHandler = messageHandlerArg;
 
     mqttEventGroup = xEventGroupCreate();
