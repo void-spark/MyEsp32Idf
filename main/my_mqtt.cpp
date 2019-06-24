@@ -19,6 +19,9 @@ static EventGroupHandle_t mqttEventGroup;
 
 static char deviceTopic[30] = {};
 
+// I expect event loop events to come from one task, so no need for volatile/semaphores
+static uint32_t reconnectCount = -1;
+
 static esp_mqtt_client_handle_t mqttClient;
 
 static TimerHandle_t statsTimer;
@@ -53,6 +56,10 @@ static void publishStats() {
     snprintf(heap, sizeof(heap), "%u", esp_get_free_heap_size());
     publishDevProp("stats/freeheap", heap);
 
+	char reconnects[10];
+    snprintf(reconnects, sizeof(reconnects), "%d", reconnectCount);
+    publishDevProp("stats/reconnects", reconnects);
+
 	char signal[16];
     wifi_ap_record_t wifidata = {};
     ESP_ERROR_CHECK(esp_wifi_sta_get_ap_info(&wifidata));
@@ -66,6 +73,8 @@ static void publishStatsCallback(TimerHandle_t xTimer) {
 }
 
 static void handleConnected() {
+    reconnectCount++;
+
     publishDevProp("homie", "3.0.1");
 
     publishDevProp("state", "init");
@@ -90,7 +99,7 @@ static void handleConnected() {
     
     publishDevProp("implementation", "custom");
 
-    publishDevProp("stats", "TODO:uptime,freeheap,signal");
+    publishDevProp("stats", "uptime,freeheap,signal,reconnects");
 
 	char interval[10];
     snprintf(interval, sizeof(interval), "%d", STATS_INTERVAL_SEC);
@@ -101,10 +110,13 @@ static void handleConnected() {
 
     topicSubscriber();
 
-    statsTimer = xTimerCreate("StatsTimer", ((STATS_INTERVAL_SEC * 1000) / portTICK_PERIOD_MS), pdTRUE, (void *) 0, publishStatsCallback);
     xTimerStart(statsTimer, 0);
 
     publishDevProp("state", "ready");
+}
+
+static void handleDisconnected() {
+    xTimerStop(statsTimer, 0);
 }
 
 // Topic will be modified by strtok_r
@@ -154,6 +166,7 @@ static esp_err_t mqttEventHandler(esp_mqtt_event_handle_t event) {
             break;
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+            handleDisconnected();
             xEventGroupClearBits(mqttEventGroup, MQTT_CONNECTED_BIT);
             break;
         case MQTT_EVENT_SUBSCRIBED:
@@ -200,6 +213,8 @@ void mqttStart(topic_subscriber_t topicSubscriberArg, message_handler_t messageH
     messageHandler = messageHandlerArg;
 
     mqttEventGroup = xEventGroupCreate();
+
+    statsTimer = xTimerCreate("StatsTimer", ((STATS_INTERVAL_SEC * 1000) / portTICK_PERIOD_MS), pdTRUE, (void *) 0, publishStatsCallback);
 
     // Get the default MAC of this ESP32
     uint8_t mac[6];
