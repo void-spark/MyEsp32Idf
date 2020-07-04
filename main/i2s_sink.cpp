@@ -60,7 +60,8 @@ void renderSample16(int16_t left, int16_t right) {
     sample_val |= left;
     sample_val <<= 16;
     sample_val |= right;
-    i2s_push_sample(I2S_NUM, (const char *)(&sample_val), portMAX_DELAY);    
+    size_t written;
+    i2s_write(I2S_NUM, (const char *)(&sample_val), sizeof(sample_val), &written, portMAX_DELAY);    
 }
 
 
@@ -85,7 +86,8 @@ void renderSamples16(int16_t *samplesLeft, int16_t *samplesRight, size_t num_sam
     }
 
     // Using portMAX_DELAY means this blocks till all bytes are written
-    i2s_write_bytes(I2S_NUM_0, (const char *)sampleBuf, num_samples * 4, portMAX_DELAY);
+    size_t written;
+    i2s_write(I2S_NUM_0, (const char *)sampleBuf, num_samples * 4, &written, portMAX_DELAY);
 }
 
 
@@ -106,7 +108,8 @@ void renderSamples32(uint8_t *samples32, size_t num_samples) {
     }
 
     // Using portMAX_DELAY means this blocks till all bytes are written
-    i2s_write_bytes(I2S_NUM_0, (const char *)sampleBuf, num_samples * 4, portMAX_DELAY);
+    size_t written;
+    i2s_write(I2S_NUM_0, (const char *)sampleBuf, num_samples * 4, &written, portMAX_DELAY);
 }
 
 /**
@@ -116,6 +119,7 @@ void silenceBuffers() {
     int8_t empty[I2S_BUF_SIZE] = {};
     for (int pos = 0; pos < I2S_BUF_COUNT * 4; pos++) {
         // Using portMAX_DELAY means this blocks till all bytes are written
-        i2s_write_bytes(I2S_NUM_0, (const char *)empty, I2S_BUF_SIZE, portMAX_DELAY);
+        size_t written;
+        i2s_write(I2S_NUM_0, (const char *)empty, I2S_BUF_SIZE, &written, portMAX_DELAY);
     }
 }

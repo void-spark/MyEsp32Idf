@@ -136,7 +136,7 @@ static void tsknet(void *pvParameters) {
         int client_sock;
         struct sockaddr_in _client;
         int cs = sizeof(struct sockaddr_in);
-        client_sock = lwip_accept_r(sockfd, (struct sockaddr *)&_client, (socklen_t*)&cs);
+        client_sock = accept(sockfd, (struct sockaddr *)&_client, (socklen_t*)&cs);
         if(client_sock < 0){
             printf("Accept failed\n");
             return;

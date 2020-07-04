@@ -12,7 +12,7 @@ void setup_triangle_sine_waves(i2s_bits_per_sample_t bits, int sampleRate) {
     _sampleRate = sampleRate;
     _bits = bits;
     _vol = 0.4;
-    _top = (pow(2, _bits)/2 - 1) * _vol;
+    _top = (pow(2.0, _bits)/2 - 1) * _vol;
 }
 
 static void calc() {

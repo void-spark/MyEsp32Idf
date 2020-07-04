@@ -8,14 +8,15 @@
 #include "freertos/queue.h"
 #include "freertos/ringbuf.h"
 
-#include "driver/i2s.h"
-
 #include "esp_system.h"
-#include "esp_vfs_fat.h"
-#include "driver/sdspi_host.h"
-#include "sdmmc_cmd.h"
-#include "esp_vfs.h"
 
+// VFS with SD over SPI
+#include "driver/sdspi_host.h"
+#include "esp_vfs.h"
+#include "esp_vfs_fat.h"
+#include "sdmmc_cmd.h"
+
+// I2S and MP3
 #include "i2s_sink.h"
 #include "mp3player.h"
 
@@ -25,6 +26,10 @@
 #define PIN_NUM_MOSI GPIO_NUM_5
 #define PIN_NUM_CLK  GPIO_NUM_18
 #define PIN_NUM_CS GPIO_NUM_4
+
+#define SPI_DMA_CHAN    2
+
+#define SPI_SD_HOST VSPI_HOST
 
 #define PRIO_MP3 configMAX_PRIORITIES - 2
 #define PRIO_DRB configMAX_PRIORITIES - 3
@@ -69,14 +74,28 @@ void sdDoorbellGo() {
 
 static bool mountCard() {
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    host.slot = VSPI_HOST;
+    host.slot = SPI_SD_HOST;
 
-    sdspi_slot_config_t slot_config = SDSPI_SLOT_CONFIG_DEFAULT();
-    slot_config.gpio_miso = PIN_NUM_MISO;
-    slot_config.gpio_mosi = PIN_NUM_MOSI;
-    slot_config.gpio_sck  = PIN_NUM_CLK;
+    spi_bus_config_t bus_cfg = {
+        .mosi_io_num = PIN_NUM_MOSI,
+        .miso_io_num = PIN_NUM_MISO,
+        .sclk_io_num = PIN_NUM_CLK,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = 4000,
+        .flags =0,
+        .intr_flags = 0,
+    };
+
+    esp_err_t ret = spi_bus_initialize(SPI_SD_HOST, &bus_cfg, SPI_DMA_CHAN);
+    if (ret != ESP_OK) {
+        printf("Failed to initialize bus.\n");
+        return false;
+    }
+
+    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
     slot_config.gpio_cs = PIN_NUM_CS;
-    slot_config.dma_channel = 2;
+    slot_config.host_id = SPI_SD_HOST;
 
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = false,
@@ -85,11 +104,10 @@ static bool mountCard() {
     };
 
     sdmmc_card_t* card = 0;
-    esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
+    ret = esp_vfs_fat_sdspi_mount("/sdcard", &host, &slot_config, &mount_config, &card);
     if (ret != ESP_OK) {
         if (ret == ESP_FAIL) {
-            printf("Failed to mount filesystem. "
-                "If you want the card to be formatted, set format_if_mount_failed = true.\n");
+            printf("Failed to mount filesystem.\n");
         } else {
             printf("Failed to initialize the card (%s). "
                 "Make sure SD card lines have pull-up resistors in place.\n", esp_err_to_name(ret));
@@ -104,12 +122,17 @@ static bool mountCard() {
 }
 
 static bool unmountCard() {
-    esp_err_t ret2 = esp_vfs_fat_sdmmc_unmount();
-    if (ret2 != ESP_OK)
-    {
-        printf("Failed to unmount the card (%s).\n", esp_err_to_name(ret2));
+    esp_err_t ret = esp_vfs_fat_sdmmc_unmount();
+    if (ret != ESP_OK) {
+        printf("Failed to unmount the card (%s).\n", esp_err_to_name(ret));
         return false;
     }
+    ret = spi_bus_free(SPI_SD_HOST);
+    if (ret != ESP_OK) {
+        printf("Failed to free the SPI bus (%s).\n", esp_err_to_name(ret));
+        return false;
+    }
+
     return true;
 }
 
@@ -245,16 +268,19 @@ static void tskDoorbell(void *pvParameters) {
     while(true) {
         if (!mountCard()) {
             gpio_set_level(LED3_EXT, 1);
+            vTaskDelay(3000 / portTICK_PERIOD_MS);
             continue;
         }
 
         if(!printDir("/sdcard/MUSIC")) {
             gpio_set_level(LED3_EXT, 1);
+            vTaskDelay(3000 / portTICK_PERIOD_MS);
             continue;
         }
 
         if (!unmountCard()) {
             gpio_set_level(LED3_EXT, 1);
+            vTaskDelay(3000 / portTICK_PERIOD_MS);
             continue;
         }
 

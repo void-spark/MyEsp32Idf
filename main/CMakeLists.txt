@@ -1,0 +1,13 @@
+idf_component_register(SRCS "RcReceiver.cpp"
+                            "doorbell_recv.cpp"
+                            "i2s_sink.cpp"
+                            "main.cpp"
+                            "mp3player.cpp"
+                            "my_display.cpp"
+                            "my_mqtt.cpp"
+                            "player.cpp"
+                            "sd_doorbell.cpp"
+                            "sound.cpp"
+                            "tunes.cpp"
+                            "u8g2_esp32_hal.cpp"
+                       INCLUDE_DIRS ".")
