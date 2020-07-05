@@ -1,11 +1,9 @@
 #ifndef RcReceiver_h
 #define RcReceiver_h
 
-#include <stdio.h>
 #include <stdint.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
-#include "esp_system.h"
 
 // more ext
 enum { TRI_0, TRI_1, TRI_F, TRI_INVALID };
@@ -34,7 +32,7 @@ class RcReceiver {
 
     void printInfo();
 
-    void IRAM_ATTR handleInterrupt(const uint32_t time);
+    void handleInterrupt(const uint32_t time);
     struct BitData* getReceivedBits();
     uint8_t* getTris(const struct BitData* bitData);
     void printAcTimings(const struct BitData* bitData);
@@ -81,8 +79,8 @@ class RcReceiver {
     struct BitData* bitDataHolder;
 
 
-    IRAM_ATTR uint8_t getBitType(const uint32_t lastDuration, const uint32_t duration);
-    IRAM_ATTR void handleDuration(const uint32_t duration);
+    uint8_t getBitType(const uint32_t lastDuration, const uint32_t duration);
+    void handleDuration(const uint32_t duration);
     void printTimings(const struct BitData* bitData, bool bits, bool durations);
 
 };
