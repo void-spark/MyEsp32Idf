@@ -1,6 +1,4 @@
-idf_component_register(SRCS "RcReceiver.cpp"
-                            "doorbell_recv.cpp"
-                            "i2s_sink.cpp"
+idf_component_register(SRCS "i2s_sink.cpp"
                             "main.cpp"
                             "mp3player.cpp"
                             "my_display.cpp"
