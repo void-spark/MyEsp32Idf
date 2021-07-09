@@ -5,7 +5,6 @@
             "includePath": [
                 "${workspaceFolder}/build/config",
                 "${workspaceFolder}/components/LedBlink2/include",
-                "${workspaceFolder}/components/esp32_digital_led_lib/include",
                 "${workspaceFolder}/components/mad/include",
                 "${workspaceFolder}/components/u8g2/csrc",
                 "${workspaceFolder}/main",

@@ -13,7 +13,6 @@
 #include "driver/gpio.h"
 #include "lwip/err.h"
 #include "lwip/sys.h"
-#include "esp32_digital_led_lib.h"
 #include "lwip/apps/sntp.h"
 #include "LedBlink2.h"
 #include "wifi_helper.h"
@@ -47,12 +46,6 @@ LedBlink2 blinkerInt(LED_BUILTIN);
 LedBlink2 blinkerExt1(LED1_EXT);
 LedBlink2 blinkerExt2(LED2_EXT);
 
-
-strand_t strands[] = { {.rmtChannel = 0, .gpioNum = WS2812_1, .ledType = LED_WS2812B_V3, .numPixels =  NUM_PIXELS,
-   .pixels = nullptr, ._stateVars = nullptr} };
-
-strand_t * strand = &strands[0];
-
 extern "C" {
     static void infoCallBack(TimerHandle_t xTimer) {
         uint32_t nowFree  = esp_get_free_heap_size();        
@@ -78,29 +71,6 @@ static void ota_task(void * pvParameter) {
     while (1) {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
-}
-
-static void taskRc(void *pvParameters) {
-    printf("rc start: %d bytes\n", uxTaskGetStackHighWaterMark(NULL));
-
-    if (digitalLeds_initStrands(strands, 1)) {
-        printf("Failed to initialize ws2812\n");
-        while (true) {};
-    }
-    digitalLeds_resetPixels(strand);
-
-    for (int i = 0; i < strand->numPixels; i++) {
-        if(i % 3 == 0) {
-            strand->pixels[i] = pixelFromRGB(1, 0, 0);
-        } else if(i % 3 == 1) {
-            strand->pixels[i] = pixelFromRGB(0, 1, 0);
-        } else {
-            strand->pixels[i] = pixelFromRGB(0, 0, 1);
-        }
-    }
-    digitalLeds_updatePixels(strand);
-
-    vTaskDelete(NULL);
 }
 
 static TimerHandle_t buttonTimer;
@@ -220,10 +190,6 @@ extern "C" void app_main() {
 
     // TimerHandle_t timer = xTimerCreate("infoTimer", pdMS_TO_TICKS(2000), pdTRUE, NULL, infoCallBack );
     // xTimerStart(timer, 0);
-
-   if (xTaskCreatePinnedToCore(taskRc, "taskRc", configMINIMAL_STACK_SIZE + 2000, NULL, configMAX_PRIORITIES - 5, NULL, 1)!=pdPASS) {
-        printf("ERROR creating taskRc! Out of memory?\n");
-    };
 
     gpio_pad_select_gpio(BTN_BOOT);
     gpio_set_direction(BTN_BOOT, GPIO_MODE_INPUT);
