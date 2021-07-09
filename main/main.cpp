@@ -5,6 +5,7 @@
 #include "freertos/event_groups.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
+#include "esp_https_ota.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_spi_flash.h"
@@ -60,6 +61,25 @@ extern "C" {
     }
 }
 
+static const char* ota_url = "http://raspberrypi.fritz.box:8032/esp32/MyEsp32Idf.bin";
+
+static void ota_task(void * pvParameter) {
+    ESP_LOGI(TAG, "Starting OTA update...");
+
+    esp_http_client_config_t config = {
+        .url = ota_url,
+    };
+    esp_err_t ret = esp_https_ota(&config);
+    if (ret == ESP_OK) {
+        esp_restart();
+    } else {
+        ESP_LOGE(TAG, "Firmware Upgrades Failed");
+    }
+    while (1) {
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+
 static void taskRc(void *pvParameters) {
     printf("rc start: %d bytes\n", uxTaskGetStackHighWaterMark(NULL));
 
@@ -99,6 +119,7 @@ static void buttonTimerCallback(TimerHandle_t xTimer) {
 static void subscribeTopics() {
     // TODO: Send node/properties details, rename to setup or so?
     subscribeDevTopic("display/header/set");
+    subscribeDevTopic("$update");
 
     subscribeTopic("devices/receiver/doorbell/pushed");
 }
@@ -120,6 +141,14 @@ static bool handleAnyMessage(const char* topic, const char* data) {
 }
 
 static void handleMessage(const char* topic1, const char* topic2, const char* topic3, const char* data) {
+
+    if(
+        strcmp(topic1, "$update") == 0 && 
+        topic2 == NULL && 
+        topic3 == NULL
+    ) {
+        xTaskCreate(&ota_task, "ota_task", 8192, NULL, 5, NULL);
+    }
 
     if(strcmp(topic1, "display") == 0 && strcmp(topic2, "header") == 0 && strcmp(topic3, "set") == 0) {
         updateHeader(data);

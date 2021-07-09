@@ -18,6 +18,7 @@
                 "${workspaceFolder}/sdk/idf/components/esp_eth/include",
                 "${workspaceFolder}/sdk/idf/components/esp_event/include",
                 "${workspaceFolder}/sdk/idf/components/esp_http_client/include",
+                "${workspaceFolder}/sdk/idf/components/esp_https_ota/include",
                 "${workspaceFolder}/sdk/idf/components/esp_hw_support/include",
                 "${workspaceFolder}/sdk/idf/components/esp_netif/include",
                 "${workspaceFolder}/sdk/idf/components/esp_ringbuf/include",
