@@ -3,16 +3,16 @@
         {
             "name": "Win32",
             "includePath": [
-                "${workspaceFolder}",
-                "${workspaceFolder}/main",
+                "${workspaceFolder}/build/config",
                 "${workspaceFolder}/components/LedBlink2/include",
                 "${workspaceFolder}/components/esp32_digital_led_lib/include",
                 "${workspaceFolder}/components/mad/include",
                 "${workspaceFolder}/components/u8g2/csrc",
+                "${workspaceFolder}/main",
                 "${workspaceFolder}/sdk/idf/components/app_update/include",
                 "${workspaceFolder}/sdk/idf/components/bootloader_support/include",
-                "${workspaceFolder}/sdk/idf/components/driver/include",
                 "${workspaceFolder}/sdk/idf/components/driver/esp32/include",
+                "${workspaceFolder}/sdk/idf/components/driver/include",
                 "${workspaceFolder}/sdk/idf/components/esp32/include",
                 "${workspaceFolder}/sdk/idf/components/esp_common/include",
                 "${workspaceFolder}/sdk/idf/components/esp_eth/include",
@@ -29,8 +29,8 @@
                 "${workspaceFolder}/sdk/idf/components/fatfs/vfs",
                 "${workspaceFolder}/sdk/idf/components/freertos/include",
                 "${workspaceFolder}/sdk/idf/components/freertos/port/xtensa/include",
-                "${workspaceFolder}/sdk/idf/components/hal/include",
                 "${workspaceFolder}/sdk/idf/components/hal/esp32/include",
+                "${workspaceFolder}/sdk/idf/components/hal/include",
                 "${workspaceFolder}/sdk/idf/components/heap/include",
                 "${workspaceFolder}/sdk/idf/components/log/include",
                 "${workspaceFolder}/sdk/idf/components/lwip/include/apps",
@@ -50,19 +50,19 @@
                 "${workspaceFolder}/sdk/idf/components/wear_levelling/include",
                 "${workspaceFolder}/sdk/idf/components/xtensa/esp32/include",
                 "${workspaceFolder}/sdk/idf/components/xtensa/include",
-                "${workspaceFolder}/sdk/tools/xtensa-esp32-elf/esp-2020r3-8.4.0/xtensa-esp32-elf/lib/gcc/xtensa-esp32-elf/8.4.0/include",
-                "${workspaceFolder}/sdk/tools/xtensa-esp32-elf/esp-2020r3-8.4.0/xtensa-esp32-elf/xtensa-esp32-elf/include/c++/8.4.0",
-                "${workspaceFolder}/sdk/tools/xtensa-esp32-elf/esp-2020r3-8.4.0/xtensa-esp32-elf/xtensa-esp32-elf/include/c++/8.4.0/xtensa-esp32-elf",
-                "${workspaceFolder}/sdk/tools/xtensa-esp32-elf/esp-2020r3-8.4.0/xtensa-esp32-elf/xtensa-esp32-elf/include",
-                "${workspaceFolder}/build/config"
+                "${workspaceFolder}/sdk/tools/xtensa-esp32-elf/esp-2021r1-8.4.0/xtensa-esp32-elf/lib/gcc/xtensa-esp32-elf/8.4.0/include",
+                "${workspaceFolder}/sdk/tools/xtensa-esp32-elf/esp-2021r1-8.4.0/xtensa-esp32-elf/xtensa-esp32-elf/include",
+                "${workspaceFolder}",
+                "${workspaceFolder}/components/wifi_helper/include",
+                "${workspaceFolder}/components/mqtt_helper/include"
             ],
             "browse": {
                 "path": [
                     "${workspaceFolder}",
                     "${workspaceFolder}/components",
                     "${workspaceFolder}/sdk/idf/components",
-                    "${workspaceFolder}/sdk/tools/xtensa-esp32-elf/esp-2020r3-8.4.0/xtensa-esp32-elf/lib/gcc/xtensa-esp32-elf/8.4.0/include",
-                    "${workspaceFolder}/sdk/tools/xtensa-esp32-elf/esp-2020r3-8.4.0/xtensa-esp32-elf/xtensa-esp32-elf/include/c++/8.4.0"
+                    "${workspaceFolder}/sdk/tools/xtensa-esp32-elf/esp-2021r1-8.4.0/xtensa-esp32-elf/lib/gcc/xtensa-esp32-elf/8.4.0/include",
+                    "${workspaceFolder}/sdk/tools/xtensa-esp32-elf/esp-2021r1-8.4.0/xtensa-esp32-elf/xtensa-esp32-elf/include/c++/8.4.0"
                 ],
                 "limitSymbolsToIncludedHeaders": true,
                 "databaseFilename": ""
