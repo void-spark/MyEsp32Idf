@@ -45,31 +45,39 @@ static volatile int32_t screen = 0;
 static void task_my_display(void *ignore) {
 	const TickType_t xDelay = 5 / portTICK_PERIOD_MS;
 
-	int pos = 0;
+	uint32_t cnt = 0;
+
+	uint32_t yTop = 0;
+	uint32_t yLeft = 0;
+	uint32_t bTop = 0;
+	uint32_t bLeft = 0;
+
 	while(true) {
 		u8g2_ClearBuffer(&u8g2);
 
 		// 128 wide, 64 high. 16 pixels yellow, 48 blue
 
+		cnt++;
+		if(cnt == 1000) {
+			yTop = esp_random() % (5 + 1);
+			yLeft = esp_random() % (12 + 1);
+		}
+		if(cnt == 2000) {
+			cnt = 0;
+			bTop = esp_random() % (28 + 1);
+			bLeft = esp_random() % (38 + 1);
+		}
 
 		if(screen == 0) {
 			u8g2_SetFont(&u8g2, u8g2_font_9x15B_tr);
 			xSemaphoreTake(dataSemaphore, portMAX_DELAY);
-			u8g2_DrawStr(&u8g2, 0, u8g2_GetAscent(&u8g2), header);
+			u8g2_DrawStr(&u8g2, yLeft, yTop + u8g2_GetAscent(&u8g2), header);
 			xSemaphoreGive(dataSemaphore);
 		} else if(screen == 1) {
 			u8g2_SetFont(&u8g2, u8g2_font_8x13B_mn);
 			xSemaphoreTake(dataSemaphore, portMAX_DELAY);
 			u8g2_DrawStr(&u8g2, 0, u8g2_GetAscent(&u8g2), ip);
 			xSemaphoreGive(dataSemaphore);
-		}
-
-		u8g2_DrawBox(&u8g2, pos, START_BLUE - 1, 15, 1);
-		u8g2_DrawBox(&u8g2, 127 - pos, START_BLUE , 15, 1);
-
-		pos++;
-		if(pos + 15 > 128) {
-			pos = 0;
 		}
 
 		time_t now;
@@ -81,12 +89,11 @@ static void task_my_display(void *ignore) {
 
 			strftime(strftime_buf, sizeof(strftime_buf), "%a %e %b %Y", &timeinfo);
 			u8g2_SetFont(&u8g2, u8g2_font_profont12_tr);
-			u8g2_DrawStr(&u8g2, 0, START_BLUE + 4 + u8g2_GetAscent(&u8g2), strftime_buf);
-
+			u8g2_DrawStr(&u8g2, bLeft, bTop + START_BLUE + u8g2_GetAscent(&u8g2), strftime_buf);
 
 			strftime(strftime_buf, sizeof(strftime_buf), "%H:%M:%S", &timeinfo);
 			u8g2_SetFont(&u8g2, u8g2_font_profont12_mn);
-			u8g2_DrawStr(&u8g2, 0, START_BLUE + 4 + 12 + u8g2_GetAscent(&u8g2), strftime_buf);
+			u8g2_DrawStr(&u8g2, bLeft, bTop + START_BLUE + 12 + u8g2_GetAscent(&u8g2), strftime_buf);
 		}
 
 		u8g2_SendBuffer(&u8g2);
