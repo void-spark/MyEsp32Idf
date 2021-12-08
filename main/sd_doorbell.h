@@ -4,6 +4,7 @@
 void sdDoorbellSetup();
 
 void sdDoorbellStart();
-void sdDoorbellGo();
+void sdDoorbellRing();
+void sdDoorbellQuiet();
 
 #endif

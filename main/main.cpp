@@ -92,6 +92,7 @@ static void subscribeTopics() {
     subscribeDevTopic("$update");
 
     subscribeTopic("devices/receiver/doorbell/pushed");
+    subscribeTopic("devices/receiver/doorbell/reset");
 }
 
 static bool handleAnyMessage(const char* topic, const char* data) {
@@ -102,7 +103,13 @@ static bool handleAnyMessage(const char* topic, const char* data) {
         //startMarch(13);
         // startSimple(13);
 
-        sdDoorbellGo();
+        sdDoorbellRing();
+
+        return true;
+    }
+
+    if(strcmp(topic,"devices/receiver/doorbell/reset") == 0) {
+        sdDoorbellQuiet();
 
         return true;
     }

@@ -7,6 +7,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/ringbuf.h"
+#include "freertos/event_groups.h"
 
 #include "esp_system.h"
 
@@ -40,12 +41,12 @@ static void tskDoorbell(void *pvParameters);
 
 static QueueHandle_t soundData = NULL;
 
-static SemaphoreHandle_t goSemaphore = NULL;
+static EventGroupHandle_t doorbellEventGroup;
 
+const int START_BIT = BIT0;
+const int STOP_BIT = BIT1;
 
 static mp3player_handle_t mp3Player = NULL;
-
-
 
 void sdDoorbellSetup() {
     gpio_pad_select_gpio(LED3_EXT);
@@ -59,7 +60,7 @@ void sdDoorbellStart() {
 
     printf("Create sound data queue\n");
     soundData = xQueueCreate(SOUND_DATA_QUEUE_LEN, sizeof(dataBlock));
-    goSemaphore = xSemaphoreCreateBinary();
+    doorbellEventGroup = xEventGroupCreate();
 
     printf("Create NET task\n");
     if (xTaskCreatePinnedToCore(tskDoorbell, "tskDoorbell", 1024*3, NULL, PRIO_DRB, NULL, 1)!=pdPASS) {
@@ -68,8 +69,13 @@ void sdDoorbellStart() {
     printf("Player started\n");
 }
 
-void sdDoorbellGo() {
-    xSemaphoreGive(goSemaphore);
+void sdDoorbellRing() {
+    xEventGroupClearBits(doorbellEventGroup, STOP_BIT);
+    xEventGroupSetBits(doorbellEventGroup, START_BIT);
+}
+
+void sdDoorbellQuiet() {
+    xEventGroupSetBits(doorbellEventGroup, STOP_BIT);
 }
 
 static bool mountCard() {
@@ -176,6 +182,11 @@ static bool playFile(const char* name) {
             }
             break;
         }
+        EventBits_t bits = xEventGroupWaitBits(doorbellEventGroup, STOP_BIT, true, false, 0);
+        if((bits & STOP_BIT) != 0) {
+            break;
+        }
+
         filesize += data.used;
         data.reset = false;
         xQueueSendToBack(soundData, &data, portMAX_DELAY);
@@ -287,7 +298,8 @@ static void tskDoorbell(void *pvParameters) {
         gpio_set_level(LED3_EXT, 0);
 
         //playSong();
-        if(xSemaphoreTake(goSemaphore, pdMS_TO_TICKS(15000))) {
+        EventBits_t bits = xEventGroupWaitBits(doorbellEventGroup, START_BIT, true, false, pdMS_TO_TICKS(15000));
+        if((bits & START_BIT) != 0) {
             playFile();
         }
     }
