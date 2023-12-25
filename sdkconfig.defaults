@@ -15,9 +15,6 @@ CONFIG_OTA_ALLOW_HTTP=y
 CONFIG_ESP32_DEFAULT_CPU_FREQ_240=y
 CONFIG_FREERTOS_HZ=1000
 
-# We do MQTT stuff (status reports) on the timer, which tends to hit the stack limit (default 2048).
-CONFIG_FREERTOS_TIMER_TASK_STACK_DEPTH=3072
-
 # Disable fancy MQTT things we don't want
 CONFIG_MQTT_TRANSPORT_SSL=
 CONFIG_MQTT_TRANSPORT_WEBSOCKET=
