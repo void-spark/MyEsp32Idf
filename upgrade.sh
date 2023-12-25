@@ -8,4 +8,4 @@ docker cp /tmp/esp32 esp_fw:/usr/share/nginx/html ; \
 rm -rf /tmp/esp32 ; \
 docker exec -w /usr/share/nginx/html/esp32 -i esp_fw sh -c 'chown -R root:root . ; ls -lah' "
 
-docker run --init -it --rm efrecon/mqtt-client sh -c "pub -h debian.fritz.box -t 'devices/3c71bf0c0ad4/\$update' -m true ; sub -h debian.fritz.box -t 'devices/3c71bf0c0ad4/\$state' -C 3 -R -v"
+docker run --init -it --rm --entrypoint sh efrecon/mqtt-client -c "pub -h debian.fritz.box -t 'devices/3c71bf0c0ad4/\$update' -m true ; sub -h debian.fritz.box -t 'devices/3c71bf0c0ad4/\$state' -C 3 -R -v"
