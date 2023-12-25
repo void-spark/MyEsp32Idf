@@ -10,6 +10,7 @@
 #include "freertos/event_groups.h"
 
 #include "esp_system.h"
+#include "esp_random.h"
 
 // VFS with SD over SPI
 #include "driver/sdspi_host.h"
@@ -49,9 +50,9 @@ const int STOP_BIT = BIT1;
 static mp3player_handle_t mp3Player = NULL;
 
 void sdDoorbellSetup() {
-    gpio_pad_select_gpio(LED3_EXT);
-    gpio_set_direction(LED3_EXT, GPIO_MODE_OUTPUT);
-    gpio_set_level(LED3_EXT, 0);
+	ESP_ERROR_CHECK(gpio_reset_pin(LED3_EXT));
+	ESP_ERROR_CHECK(gpio_set_direction(LED3_EXT, GPIO_MODE_OUTPUT));
+	ESP_ERROR_CHECK(gpio_set_level(LED3_EXT, 0));
 
     i2sSetup();
 }

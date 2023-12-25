@@ -1,8 +1,12 @@
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
+#include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "esp_chip_info.h"
+#include "esp_flash.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "esp_https_ota.h"
@@ -24,9 +28,6 @@
 #define LED_BUILTIN GPIO_NUM_2
 #define LED1_EXT GPIO_NUM_27
 #define LED2_EXT GPIO_NUM_32
-
-#define WS2812_1 GPIO_NUM_26
-#define NUM_PIXELS 8
 
 // WiFi credentials.
 #define WIFI_SSID "Milkrun"
@@ -50,7 +51,7 @@ extern "C" {
     static void infoCallBack(TimerHandle_t xTimer) {
         uint32_t nowFree  = esp_get_free_heap_size();        
         uint32_t minimumFree = esp_get_minimum_free_heap_size();
-        printf("Free: %d (%dk), min: %d(%dk)\n", nowFree, nowFree/1024, minimumFree, minimumFree/1024);
+        printf("Free: %lu (%luk), min: %lu(%luk)\n", nowFree, nowFree/1024, minimumFree, minimumFree/1024);
     }
 }
 
@@ -59,11 +60,16 @@ static const char* ota_url = "http://raspberrypi.fritz.box:8032/esp32/MyEsp32Idf
 static void ota_task(void * pvParameter) {
     ESP_LOGI(TAG, "Starting OTA update...");
 
-    esp_http_client_config_t config = {
-        .url = ota_url,
-    };
-    esp_err_t ret = esp_https_ota(&config);
+    esp_http_client_config_t config = {};
+    config.url = ota_url;
+
+    esp_https_ota_config_t ota_config = {};
+    ota_config.http_config = &config;
+
+    ESP_LOGI(TAG, "Attempting to download update from %s", config.url);
+    esp_err_t ret = esp_https_ota(&ota_config);
     if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "OTA Succeed, Rebooting...");
         esp_restart();
     } else {
         ESP_LOGE(TAG, "Firmware Upgrades Failed");
@@ -134,25 +140,30 @@ static void handleMessage(const char* topic1, const char* topic2, const char* to
 }
 
 extern "C" void app_main() {
-
-    gpio_pad_select_gpio(WS2812_1);
-    gpio_set_direction(WS2812_1, GPIO_MODE_OUTPUT);
-    gpio_set_level(WS2812_1, 0);
-
     sdDoorbellSetup();
 
     /* Print chip information */
     esp_chip_info_t chip_info;
+    uint32_t flash_size;
     esp_chip_info(&chip_info);
-    printf("This is ESP32 chip with %d CPU cores, WiFi%s%s, ",
-        chip_info.cores,
-        (chip_info.features & CHIP_FEATURE_BT) ? "/BT" : "",
-        (chip_info.features & CHIP_FEATURE_BLE) ? "/BLE" : "");
+    printf("This is %s chip with %d CPU core(s), %s%s%s%s, ",
+           CONFIG_IDF_TARGET,
+           chip_info.cores,
+           (chip_info.features & CHIP_FEATURE_WIFI_BGN) ? "WiFi/" : "",
+           (chip_info.features & CHIP_FEATURE_BT) ? "BT" : "",
+           (chip_info.features & CHIP_FEATURE_BLE) ? "BLE" : "",
+           (chip_info.features & CHIP_FEATURE_IEEE802154) ? ", 802.15.4 (Zigbee/Thread)" : "");
 
-    printf("silicon revision %d, ", chip_info.revision);
+    unsigned major_rev = chip_info.revision / 100;
+    unsigned minor_rev = chip_info.revision % 100;
+    printf("silicon revision v%d.%d, ", major_rev, minor_rev);
+    if(esp_flash_get_size(NULL, &flash_size) != ESP_OK) {
+        printf("Get flash size failed");
+        return;
+    }
 
-    printf("%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
-        (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
+    printf("%" PRIu32 "MB %s flash\n", flash_size / (uint32_t)(1024 * 1024),
+           (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
@@ -173,9 +184,12 @@ extern "C" void app_main() {
     updateHeader("Wait: WiFi");
     wifiWait();
 
-    tcpip_adapter_ip_info_t ipInfo = {}; 
-    tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_STA, &ipInfo);
-    updateIp(ip4addr_ntoa(&ipInfo.ip));
+    esp_netif_ip_info_t ipInfo = {}; 
+    esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");    
+    esp_netif_get_ip_info(netif, &ipInfo);
+	char ipValue[16];
+    snprintf(ipValue, sizeof(ipValue), IPSTR, IP2STR(&ipInfo.ip));
+    updateIp(ipValue);
 
     blinkerInt.setPattern(ledPatternPendingMqtt);
 
@@ -184,7 +198,7 @@ extern "C" void app_main() {
     sntp_setservername(0, "pool.ntp.org");
     sntp_init();
 
-    mqttStart(subscribeTopics, handleMessage, handleAnyMessage);
+    mqttStart("Desk doorbell receiver", subscribeTopics, handleMessage, handleAnyMessage);
 
     ESP_LOGI(TAG, "Waiting for MQTT");
     updateHeader("Wait: MQTT");
@@ -198,8 +212,10 @@ extern "C" void app_main() {
     // TimerHandle_t timer = xTimerCreate("infoTimer", pdMS_TO_TICKS(2000), pdTRUE, NULL, infoCallBack );
     // xTimerStart(timer, 0);
 
-    gpio_pad_select_gpio(BTN_BOOT);
-    gpio_set_direction(BTN_BOOT, GPIO_MODE_INPUT);
+	ESP_ERROR_CHECK(gpio_reset_pin(BTN_BOOT));
+	ESP_ERROR_CHECK(gpio_set_pull_mode(BTN_BOOT, GPIO_FLOATING));
+	ESP_ERROR_CHECK(gpio_set_direction(BTN_BOOT, GPIO_MODE_INPUT));
+
     buttonTimer = xTimerCreate("ButtonTimer", (5 / portTICK_PERIOD_MS), pdTRUE, (void *) 0, buttonTimerCallback);
 
     xTimerStart(buttonTimer, 0);

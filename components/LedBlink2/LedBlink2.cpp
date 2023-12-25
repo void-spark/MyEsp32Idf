@@ -10,9 +10,9 @@ extern "C" {
 
 //TODO: Destructor?
 LedBlink2::LedBlink2(gpio_num_t pin){
-    gpio_pad_select_gpio(pin);
-    gpio_set_direction(pin, GPIO_MODE_OUTPUT);
-    gpio_set_level(pin, 0);
+	ESP_ERROR_CHECK(gpio_reset_pin(pin));
+	ESP_ERROR_CHECK(gpio_set_direction(pin, GPIO_MODE_OUTPUT));
+	ESP_ERROR_CHECK(gpio_set_level(pin, 0));
 
     _pin = pin;
 }
@@ -51,11 +51,11 @@ void LedBlink2::_trigger() {
             _times -= 1;
         }
         _state = 1;
-        gpio_set_level(_pin, _state);
+        ESP_ERROR_CHECK(gpio_set_level(_pin, _state));
         xTimerChangePeriod(_timer, pdMS_TO_TICKS(_pattern[0]), 0);
     } else {
         _state = 0;
-        gpio_set_level(_pin, _state);
+        ESP_ERROR_CHECK(gpio_set_level(_pin, _state));
         xTimerChangePeriod(_timer, pdMS_TO_TICKS(_pattern[1]), 0);
     }
 }
